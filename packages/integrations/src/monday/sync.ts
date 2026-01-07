@@ -4,7 +4,7 @@
  */
 
 import { eq, and, sql } from 'drizzle-orm'
-import { hashData, sleep } from '@mrst/shared'
+import { hashData, sleep, downloadAndUploadToS3, generateS3Key } from '@mrst/shared'
 import {
   mondayWorkspaces,
   mondayBoards,
@@ -1448,4 +1448,126 @@ export async function syncFullBoard(
   }
 
   return result
+}
+
+/**
+ * Download pending files to S3
+ * Queries files that haven't been downloaded and uploads them to S3
+ */
+export async function downloadPendingFiles(
+  ctx: SyncContext,
+  options: { batchSize?: number; maxFiles?: number } = {}
+): Promise<SyncResult> {
+  const { batchSize = 10, maxFiles = 100 } = options
+  const counts = createCounts()
+
+  try {
+    ctx.onProgress?.('Fetching pending files to download...')
+
+    // Get files that haven't been downloaded to S3
+    const pendingFiles = await ctx.db
+      .select({
+        id: mondayFiles.id,
+        externalId: mondayFiles.externalId,
+        name: mondayFiles.name,
+        url: mondayFiles.url,
+        fileExtension: mondayFiles.fileExtension,
+        itemId: mondayFiles.itemId,
+        updateId: mondayFiles.updateId,
+      })
+      .from(mondayFiles)
+      .where(
+        and(
+          eq(mondayFiles.integrationAccountId, ctx.integrationAccountId),
+          eq(mondayFiles.s3Downloaded, false)
+        )
+      )
+      .limit(maxFiles)
+
+    if (pendingFiles.length === 0) {
+      ctx.onProgress?.('No pending files to download')
+      return { success: true, counts }
+    }
+
+    ctx.onProgress?.(`Found ${pendingFiles.length} files to download`)
+
+    // Process in batches
+    for (let i = 0; i < pendingFiles.length; i += batchSize) {
+      const batch = pendingFiles.slice(i, i + batchSize)
+
+      await Promise.all(
+        batch.map(async (file) => {
+          counts.processed++
+
+          try {
+            // Skip if no URL
+            if (!file.url) {
+              counts.errored++
+              return
+            }
+
+            // Generate S3 key
+            const s3Key = generateS3Key({
+              tenantId: ctx.tenantId,
+              source: 'monday',
+              entityType: file.updateId ? 'update_file' : 'item_file',
+              entityId: file.updateId || file.itemId || file.externalId,
+              filename: file.name,
+            })
+
+            // Download and upload to S3
+            const result = await downloadAndUploadToS3({
+              sourceUrl: file.url,
+              key: s3Key,
+            })
+
+            // Update the file record
+            await ctx.db
+              .update(mondayFiles)
+              .set({
+                s3Downloaded: true,
+                s3Bucket: result.bucket,
+                s3Key: result.key,
+                fileSize: result.size,
+                downloadedAt: new Date(),
+              })
+              .where(eq(mondayFiles.id, file.id))
+
+            counts.updated++
+            ctx.onProgress?.(`Downloaded: ${file.name}`)
+          } catch (err) {
+            console.error(`Error downloading file ${file.id} (${file.name}):`, err)
+            counts.errored++
+          }
+        })
+      )
+
+      // Small delay between batches
+      if (i + batchSize < pendingFiles.length) {
+        await sleep(500)
+      }
+    }
+
+    ctx.onProgress?.(`Downloaded ${counts.updated} files to S3`, counts)
+    return { success: true, counts }
+  } catch (error) {
+    return { success: false, counts, error: (error as Error).message }
+  }
+}
+
+/**
+ * Get count of pending files to download
+ */
+export async function getPendingFileCount(ctx: SyncContext): Promise<number> {
+  const result = await ctx.db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(mondayFiles)
+    .where(
+      and(
+        eq(mondayFiles.integrationAccountId, ctx.integrationAccountId),
+        eq(mondayFiles.s3Downloaded, false)
+      )
+    )
+
+  return result[0]?.count || 0
 }

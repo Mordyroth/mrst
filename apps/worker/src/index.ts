@@ -12,6 +12,7 @@ import {
   syncBoards,
   syncUsers,
   syncFullBoard,
+  downloadPendingFiles,
   type SyncContext,
 } from '@mrst/integrations/monday'
 
@@ -127,11 +128,12 @@ async function getMondayClient(db: Database, integrationAccountId: string): Prom
     )
     .limit(1)
 
-  if (account.length === 0) {
+  const firstAccount = account[0]
+  if (!firstAccount) {
     return null
   }
 
-  const credentials = account[0].credentials as { apiKey: string }
+  const credentials = firstAccount.credentials as { apiKey: string }
   if (!credentials?.apiKey) {
     return null
   }
@@ -171,201 +173,247 @@ async function registerHandlers(boss: PgBoss, db: Database): Promise<void> {
   console.log('[Worker] Registering job handlers...')
 
   // Monday full sync - sync everything
-  await boss.work<MondaySyncJobData>(JOB_TYPES.SYNC_MONDAY_FULL, { teamConcurrency: 1 }, async (job) => {
-    console.log(`[Worker] Processing ${JOB_TYPES.SYNC_MONDAY_FULL}:`, job.id)
+  await boss.work<MondaySyncJobData>(JOB_TYPES.SYNC_MONDAY_FULL, { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) {
+      console.log(`[Worker] Processing ${JOB_TYPES.SYNC_MONDAY_FULL}:`, job.id)
 
-    const { integrationAccountId, tenantId } = job.data
-    const client = await getMondayClient(db, integrationAccountId)
+      const { integrationAccountId, tenantId } = job.data
+      const client = await getMondayClient(db, integrationAccountId)
 
-    if (!client) {
-      console.error(`[Worker:${job.id}] Monday.com client not available for account ${integrationAccountId}`)
-      return { status: 'error', error: 'Client not available' }
-    }
-
-    const ctx = createSyncContext(db, client, integrationAccountId, tenantId, job.id)
-
-    try {
-      // Sync workspaces
-      const workspacesResult = await syncWorkspaces(ctx)
-      console.log(`[Worker:${job.id}] Workspaces: ${workspacesResult.success ? 'OK' : 'FAILED'}`)
-
-      // Sync all boards
-      const boardsResult = await syncBoards(ctx, { markInScope: false })
-      console.log(`[Worker:${job.id}] Boards: ${boardsResult.success ? 'OK' : 'FAILED'}`)
-
-      // Sync users
-      const usersResult = await syncUsers(ctx)
-      console.log(`[Worker:${job.id}] Users: ${usersResult.success ? 'OK' : 'FAILED'}`)
-
-      return {
-        status: 'success',
-        workspaces: workspacesResult.counts,
-        boards: boardsResult.counts,
-        users: usersResult.counts,
+      if (!client) {
+        console.error(`[Worker:${job.id}] Monday.com client not available for account ${integrationAccountId}`)
+        return { status: 'error', error: 'Client not available' }
       }
-    } catch (error) {
-      console.error(`[Worker:${job.id}] Monday full sync failed:`, error)
-      return { status: 'error', error: (error as Error).message }
+
+      const ctx = createSyncContext(db, client, integrationAccountId, tenantId, job.id)
+
+      try {
+        // Sync workspaces
+        const workspacesResult = await syncWorkspaces(ctx)
+        console.log(`[Worker:${job.id}] Workspaces: ${workspacesResult.success ? 'OK' : 'FAILED'}`)
+
+        // Sync all boards
+        const boardsResult = await syncBoards(ctx, { markInScope: false })
+        console.log(`[Worker:${job.id}] Boards: ${boardsResult.success ? 'OK' : 'FAILED'}`)
+
+        // Sync users
+        const usersResult = await syncUsers(ctx)
+        console.log(`[Worker:${job.id}] Users: ${usersResult.success ? 'OK' : 'FAILED'}`)
+
+        return {
+          status: 'success',
+          workspaces: workspacesResult.counts,
+          boards: boardsResult.counts,
+          users: usersResult.counts,
+        }
+      } catch (error) {
+        console.error(`[Worker:${job.id}] Monday full sync failed:`, error)
+        return { status: 'error', error: (error as Error).message }
+      }
     }
   })
 
   // Monday incremental sync - sync in-scope boards
-  await boss.work<MondaySyncJobData>(JOB_TYPES.SYNC_MONDAY_INCREMENTAL, { teamConcurrency: 1 }, async (job) => {
-    console.log(`[Worker] Processing ${JOB_TYPES.SYNC_MONDAY_INCREMENTAL}:`, job.id)
+  await boss.work<MondaySyncJobData>(JOB_TYPES.SYNC_MONDAY_INCREMENTAL, { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) {
+      console.log(`[Worker] Processing ${JOB_TYPES.SYNC_MONDAY_INCREMENTAL}:`, job.id)
 
-    const { integrationAccountId, tenantId } = job.data
-    const client = await getMondayClient(db, integrationAccountId)
+      const { integrationAccountId, tenantId } = job.data
+      const client = await getMondayClient(db, integrationAccountId)
 
-    if (!client) {
-      console.error(`[Worker:${job.id}] Monday.com client not available for account ${integrationAccountId}`)
-      return { status: 'error', error: 'Client not available' }
-    }
-
-    const ctx = createSyncContext(db, client, integrationAccountId, tenantId, job.id)
-
-    try {
-      // Get in-scope boards
-      const { mondayBoards } = await import('@mrst/db')
-      const inScopeBoards = await db
-        .select({ externalId: mondayBoards.externalId, name: mondayBoards.name })
-        .from(mondayBoards)
-        .where(
-          and(
-            eq(mondayBoards.integrationAccountId, integrationAccountId),
-            eq(mondayBoards.inScope, true)
-          )
-        )
-
-      console.log(`[Worker:${job.id}] Syncing ${inScopeBoards.length} in-scope boards`)
-
-      const results: Record<string, unknown> = {}
-
-      for (const board of inScopeBoards) {
-        const result = await syncFullBoard(ctx, board.externalId, {
-          syncActivity: true,
-          activityFrom: new Date(Date.now() - 24 * 60 * 60 * 1000), // Last 24 hours
-          trackValueChanges: true,
-        })
-        results[board.externalId] = {
-          name: board.name,
-          schema: result.schema.success,
-          items: result.items.counts.processed,
-          activity: result.activity?.counts.processed || 0,
-        }
+      if (!client) {
+        console.error(`[Worker:${job.id}] Monday.com client not available for account ${integrationAccountId}`)
+        return { status: 'error', error: 'Client not available' }
       }
 
-      return { status: 'success', boards: results }
-    } catch (error) {
-      console.error(`[Worker:${job.id}] Monday incremental sync failed:`, error)
-      return { status: 'error', error: (error as Error).message }
+      const ctx = createSyncContext(db, client, integrationAccountId, tenantId, job.id)
+
+      try {
+        // Get in-scope boards
+        const { mondayBoards } = await import('@mrst/db')
+        const inScopeBoards = await db
+          .select({ externalId: mondayBoards.externalId, name: mondayBoards.name })
+          .from(mondayBoards)
+          .where(
+            and(
+              eq(mondayBoards.integrationAccountId, integrationAccountId),
+              eq(mondayBoards.inScope, true)
+            )
+          )
+
+        console.log(`[Worker:${job.id}] Syncing ${inScopeBoards.length} in-scope boards`)
+
+        const results: Record<string, unknown> = {}
+
+        for (const board of inScopeBoards) {
+          const result = await syncFullBoard(ctx, board.externalId, {
+            syncActivity: true,
+            activityFrom: new Date(Date.now() - 24 * 60 * 60 * 1000), // Last 24 hours
+            trackValueChanges: true,
+          })
+          results[board.externalId] = {
+            name: board.name,
+            schema: result.schema.success,
+            items: result.items.counts.processed,
+            activity: result.activity?.counts.processed || 0,
+          }
+        }
+
+        return { status: 'success', boards: results }
+      } catch (error) {
+        console.error(`[Worker:${job.id}] Monday incremental sync failed:`, error)
+        return { status: 'error', error: (error as Error).message }
+      }
     }
   })
 
   // Monday board sync - sync a specific board
-  await boss.work<MondayBoardSyncJobData>(JOB_TYPES.SYNC_MONDAY_BOARD, { teamConcurrency: 3 }, async (job) => {
-    console.log(`[Worker] Processing ${JOB_TYPES.SYNC_MONDAY_BOARD}:`, job.id)
+  await boss.work<MondayBoardSyncJobData>(JOB_TYPES.SYNC_MONDAY_BOARD, { batchSize: 3 }, async (jobs) => {
+    for (const job of jobs) {
+      console.log(`[Worker] Processing ${JOB_TYPES.SYNC_MONDAY_BOARD}:`, job.id)
 
-    const { integrationAccountId, tenantId, boardId, syncActivity, activityDays } = job.data
-    const client = await getMondayClient(db, integrationAccountId)
+      const { integrationAccountId, tenantId, boardId, syncActivity, activityDays } = job.data
+      const client = await getMondayClient(db, integrationAccountId)
 
-    if (!client) {
-      console.error(`[Worker:${job.id}] Monday.com client not available for account ${integrationAccountId}`)
-      return { status: 'error', error: 'Client not available' }
-    }
-
-    const ctx = createSyncContext(db, client, integrationAccountId, tenantId, job.id)
-
-    try {
-      const result = await syncFullBoard(ctx, boardId, {
-        syncActivity: syncActivity ?? true,
-        activityFrom: activityDays
-          ? new Date(Date.now() - activityDays * 24 * 60 * 60 * 1000)
-          : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Default 30 days
-        trackValueChanges: true,
-      })
-
-      return {
-        status: 'success',
-        boardId,
-        schema: result.schema.counts,
-        items: result.items.counts,
-        activity: result.activity?.counts,
+      if (!client) {
+        console.error(`[Worker:${job.id}] Monday.com client not available for account ${integrationAccountId}`)
+        return { status: 'error', error: 'Client not available' }
       }
-    } catch (error) {
-      console.error(`[Worker:${job.id}] Monday board sync failed:`, error)
-      return { status: 'error', error: (error as Error).message }
+
+      const ctx = createSyncContext(db, client, integrationAccountId, tenantId, job.id)
+
+      try {
+        const result = await syncFullBoard(ctx, boardId, {
+          syncActivity: syncActivity ?? true,
+          activityFrom: activityDays
+            ? new Date(Date.now() - activityDays * 24 * 60 * 60 * 1000)
+            : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Default 30 days
+          trackValueChanges: true,
+        })
+
+        return {
+          status: 'success',
+          boardId,
+          schema: result.schema.counts,
+          items: result.items.counts,
+          activity: result.activity?.counts,
+        }
+      } catch (error) {
+        console.error(`[Worker:${job.id}] Monday board sync failed:`, error)
+        return { status: 'error', error: (error as Error).message }
+      }
     }
   })
 
   // HQ sync jobs
-  await boss.work(JOB_TYPES.SYNC_HQ_FULL, { teamConcurrency: 1 }, async (job) => {
-    console.log(`[Worker] Processing ${JOB_TYPES.SYNC_HQ_FULL}:`, job.id)
-    // Will be implemented in Phase 2
-    return { status: 'not_implemented' }
+  await boss.work(JOB_TYPES.SYNC_HQ_FULL, { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) {
+      console.log(`[Worker] Processing ${JOB_TYPES.SYNC_HQ_FULL}:`, job.id)
+      // Will be implemented in Phase 2
+      return { status: 'not_implemented' }
+    }
   })
 
-  await boss.work(JOB_TYPES.SYNC_HQ_INCREMENTAL, { teamConcurrency: 1 }, async (job) => {
-    console.log(`[Worker] Processing ${JOB_TYPES.SYNC_HQ_INCREMENTAL}:`, job.id)
-    // Will be implemented in Phase 2
-    return { status: 'not_implemented' }
+  await boss.work(JOB_TYPES.SYNC_HQ_INCREMENTAL, { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) {
+      console.log(`[Worker] Processing ${JOB_TYPES.SYNC_HQ_INCREMENTAL}:`, job.id)
+      // Will be implemented in Phase 2
+      return { status: 'not_implemented' }
+    }
   })
 
   // Gmail sync
-  await boss.work(JOB_TYPES.SYNC_GMAIL, { teamConcurrency: 2 }, async (job) => {
-    console.log(`[Worker] Processing ${JOB_TYPES.SYNC_GMAIL}:`, job.id)
-    // Will be implemented in Phase 4
-    return { status: 'not_implemented' }
+  await boss.work(JOB_TYPES.SYNC_GMAIL, { batchSize: 2 }, async (jobs) => {
+    for (const job of jobs) {
+      console.log(`[Worker] Processing ${JOB_TYPES.SYNC_GMAIL}:`, job.id)
+      // Will be implemented in Phase 4
+      return { status: 'not_implemented' }
+    }
   })
 
   // Spireon sync
-  await boss.work(JOB_TYPES.SYNC_SPIREON, { teamConcurrency: 1 }, async (job) => {
-    console.log(`[Worker] Processing ${JOB_TYPES.SYNC_SPIREON}:`, job.id)
-    // Will be implemented in Phase 5
-    return { status: 'not_implemented' }
+  await boss.work(JOB_TYPES.SYNC_SPIREON, { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) {
+      console.log(`[Worker] Processing ${JOB_TYPES.SYNC_SPIREON}:`, job.id)
+      // Will be implemented in Phase 5
+      return { status: 'not_implemented' }
+    }
   })
 
   // WhatsApp sync
-  await boss.work(JOB_TYPES.SYNC_WHATSAPP, { teamConcurrency: 1 }, async (job) => {
-    console.log(`[Worker] Processing ${JOB_TYPES.SYNC_WHATSAPP}:`, job.id)
-    // Will be implemented in Phase 6
-    return { status: 'not_implemented' }
+  await boss.work(JOB_TYPES.SYNC_WHATSAPP, { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) {
+      console.log(`[Worker] Processing ${JOB_TYPES.SYNC_WHATSAPP}:`, job.id)
+      // Will be implemented in Phase 6
+      return { status: 'not_implemented' }
+    }
   })
 
-  // File download
-  await boss.work(JOB_TYPES.DOWNLOAD_FILE, { teamConcurrency: 5 }, async (job) => {
-    console.log(`[Worker] Processing ${JOB_TYPES.DOWNLOAD_FILE}:`, job.id)
-    // Will be implemented when S3 is configured
-    return { status: 'not_implemented' }
+  // File download (Monday.com files to S3)
+  await boss.work<MondaySyncJobData>(JOB_TYPES.DOWNLOAD_FILE, { batchSize: 2 }, async (jobs) => {
+    for (const job of jobs) {
+      console.log(`[Worker] Processing ${JOB_TYPES.DOWNLOAD_FILE}:`, job.id)
+
+      const { integrationAccountId, tenantId } = job.data
+      const client = await getMondayClient(db, integrationAccountId)
+
+      if (!client) {
+        console.error(`[Worker:${job.id}] Monday.com client not available for account ${integrationAccountId}`)
+        return { status: 'error', error: 'Client not available' }
+      }
+
+      const ctx = createSyncContext(db, client, integrationAccountId, tenantId, job.id)
+
+      try {
+        const result = await downloadPendingFiles(ctx, { batchSize: 5, maxFiles: 50 })
+        return {
+          status: result.success ? 'success' : 'error',
+          counts: result.counts,
+          error: result.error,
+        }
+      } catch (error) {
+        console.error(`[Worker:${job.id}] File download failed:`, error)
+        return { status: 'error', error: (error as Error).message }
+      }
+    }
   })
 
   // OCR processing
-  await boss.work(JOB_TYPES.PROCESS_OCR, { teamConcurrency: 2 }, async (job) => {
-    console.log(`[Worker] Processing ${JOB_TYPES.PROCESS_OCR}:`, job.id)
-    // Will be implemented in Phase 7
-    return { status: 'not_implemented' }
+  await boss.work(JOB_TYPES.PROCESS_OCR, { batchSize: 2 }, async (jobs) => {
+    for (const job of jobs) {
+      console.log(`[Worker] Processing ${JOB_TYPES.PROCESS_OCR}:`, job.id)
+      // Will be implemented in Phase 7
+      return { status: 'not_implemented' }
+    }
   })
 
   // Identity linking
-  await boss.work(JOB_TYPES.LINK_IDENTITY, { teamConcurrency: 1 }, async (job) => {
-    console.log(`[Worker] Processing ${JOB_TYPES.LINK_IDENTITY}:`, job.id)
-    // Will be implemented in Phase 2
-    return { status: 'not_implemented' }
+  await boss.work(JOB_TYPES.LINK_IDENTITY, { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) {
+      console.log(`[Worker] Processing ${JOB_TYPES.LINK_IDENTITY}:`, job.id)
+      // Will be implemented in Phase 2
+      return { status: 'not_implemented' }
+    }
   })
 
   // Timeline event creation
-  await boss.work(JOB_TYPES.CREATE_TIMELINE_EVENT, { teamConcurrency: 5 }, async (job) => {
-    console.log(`[Worker] Processing ${JOB_TYPES.CREATE_TIMELINE_EVENT}:`, job.id)
-    // Will be implemented in Phase 3
-    return { status: 'not_implemented' }
+  await boss.work(JOB_TYPES.CREATE_TIMELINE_EVENT, { batchSize: 5 }, async (jobs) => {
+    for (const job of jobs) {
+      console.log(`[Worker] Processing ${JOB_TYPES.CREATE_TIMELINE_EVENT}:`, job.id)
+      // Will be implemented in Phase 3
+      return { status: 'not_implemented' }
+    }
   })
 
   // Session cleanup (runs every hour)
   await boss.schedule(JOB_TYPES.CLEANUP_EXPIRED_SESSIONS, '0 * * * *', {})
-  await boss.work(JOB_TYPES.CLEANUP_EXPIRED_SESSIONS, async (job) => {
-    console.log(`[Worker] Processing ${JOB_TYPES.CLEANUP_EXPIRED_SESSIONS}:`, job.id)
-    // Delete expired sessions
-    // await db.delete(sessions).where(lt(sessions.expiresAt, new Date()))
-    return { status: 'completed' }
+  await boss.work(JOB_TYPES.CLEANUP_EXPIRED_SESSIONS, { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) {
+      console.log(`[Worker] Processing ${JOB_TYPES.CLEANUP_EXPIRED_SESSIONS}:`, job.id)
+      // Delete expired sessions
+      // await db.delete(sessions).where(lt(sessions.expiresAt, new Date()))
+      return { status: 'completed' }
+    }
   })
 
   console.log('[Worker] All job handlers registered')
