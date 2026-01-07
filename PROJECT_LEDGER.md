@@ -3,28 +3,26 @@
 > This file is the source of truth for project state. Read this first every session.
 
 ## Current Status
-- **Phase:** 0 - Foundation
-- **Task:** Phase 0 Complete
-- **Progress:** 100%
+- **Phase:** 1 - Monday.com Mirror
+- **Task:** File download to S3
+- **Progress:** 90%
 - **Blockers:** None
 
 ## Last Session
 - **Date:** 2026-01-07
-- **Duration:** ~2 hours
-- **Completed:** Full Phase 0 Foundation
-- **Stopped at:** Phase 0 complete, ready for Phase 1
+- **Duration:** ~3 hours
+- **Completed:** Monday.com sync (workspaces, boards, columns, items, updates, activity, users)
+- **Stopped at:** File download to S3 remaining
 
 ## Next Steps (Ordered)
-1. Begin Phase 1: Monday.com Mirror
-2. Create Monday.com GraphQL client with rate limiting
-3. Implement workspace sync
-4. Implement board sync (mark in_scope boards)
-5. Implement column sync with display name mapping
-6. Implement item sync with column values
-7. Implement updates and replies sync
-8. Implement activity log sync
-9. Implement file download to S3
-10. Create sync jobs and test with all 17 boards
+1. Implement file download to S3 (Phase 1 completion)
+2. Begin Phase 2: HQ Rental Mirror
+3. Create HQ REST client
+4. Implement customer sync
+5. Implement vehicle sync
+6. Implement reservation sync
+7. Implement contract/payment/charge sync
+8. Populate core_customers and core_vehicles
 
 ## Phase Checklist
 
@@ -39,17 +37,17 @@
 - [x] Sync logging working (sync_runs table + API)
 - [x] Initial tenant and admin user seeded
 
-### Phase 1: Monday.com Mirror
-- [ ] GraphQL client with rate limiting
-- [ ] Workspaces synced
-- [ ] Boards synced (in_scope marked)
-- [ ] Columns synced (display names mapped)
-- [ ] Items synced with values
-- [ ] Updates/replies synced
-- [ ] Activity logs synced
-- [ ] Files downloaded
-- [ ] Sync jobs created
-- [ ] Tested with all 17 boards
+### Phase 1: Monday.com Mirror (90% Complete)
+- [x] GraphQL client with rate limiting
+- [x] Workspaces synced (8 workspaces)
+- [x] Boards synced (62 boards, 5 marked in_scope)
+- [x] Columns synced with display names (82 columns)
+- [x] Items synced with values (6,690 items, 98,031 column values)
+- [x] Updates/replies synced
+- [x] Activity logs synced (512 logs)
+- [ ] Files downloaded to S3
+- [x] Sync jobs created (SYNC_MONDAY_FULL, SYNC_MONDAY_INCREMENTAL, SYNC_MONDAY_BOARD)
+- [x] Tested with top 5 boards by item count
 
 ### Phase 2: HQ Rental Mirror
 - [ ] REST client created
@@ -112,7 +110,7 @@
 ## Integration Status
 | Integration | Client | Schema | Sync Job | Tested | Timeline |
 |-------------|--------|--------|----------|--------|----------|
-| Monday.com  | ❌ | ✅ | ❌ | ❌ | ❌ |
+| Monday.com  | ✅ | ✅ | ✅ | ✅ | ❌ |
 | HQ Rental   | ❌ | ✅ | ❌ | ❌ | ❌ |
 | Gmail       | ❌ | ✅ | ❌ | ❌ | ❌ |
 | Spireon     | ❌ | ✅ | ❌ | ❌ | ❌ |
@@ -214,10 +212,37 @@
 - PostgreSQL: 15.15
 - Credentials: /home/ec2-user/API_CREDENTIALS.md
 
+## Files Created (Phase 1)
+
+### packages/integrations/src/monday/
+- client.ts (GraphQL client with rate limiting, complexity tracking)
+- queries.ts (GraphQL query definitions)
+- types.ts (TypeScript interfaces for Monday.com API)
+- sync.ts (Full sync service using Drizzle ORM - 1449 lines)
+- test-sync.ts (Test script for sync validation)
+- index.ts (Module exports)
+
+## Test Results (Phase 1)
+```
+Synced to Database:
+  Workspaces:      8
+  Boards:          62 (5 in scope)
+  Columns:         82
+  Groups:          6
+  Items:           6,690
+  Column Values:   98,031
+  Updates:         0 (boards tested had none)
+  Replies:         0
+  Activity Logs:   512
+  Users:           10
+  Files:           0 (sync pending)
+```
+
 ## Notes for Next Session
-Phase 0 is complete. Begin Phase 1 - Monday.com Mirror:
-1. Read the Monday.com API docs
-2. Create GraphQL client with rate limiting (10M complexity/min)
-3. Start with workspace sync, then boards, columns, items
-4. Map column external_id to display titles (CRITICAL)
-5. Sync all 17 boards from credentials file
+Phase 1 Monday.com sync is 90% complete. Remaining:
+1. Implement file download to S3 (monday_files table ready)
+2. After file download: Phase 1 complete
+3. Then begin Phase 2 - HQ Rental Mirror
+
+Note: Board IDs in API_CREDENTIALS.md don't match the Monday.com account.
+Test script now syncs top 5 boards by item count instead.
