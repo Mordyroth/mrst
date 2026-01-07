@@ -1,0 +1,28 @@
+{
+  "name": "mrst",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-tenant SaaS for vehicle rental and collision businesses",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "db:generate": "turbo db:generate --filter=@mrst/db",
+    "db:migrate": "turbo db:migrate --filter=@mrst/db",
+    "db:push": "turbo db:push --filter=@mrst/db",
+    "db:studio": "pnpm --filter @mrst/db db:studio",
+    "typecheck": "turbo typecheck",
+    "clean": "turbo clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "turbo": "^2.3.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@10.27.0"
+}
