@@ -4,8 +4,8 @@
 
 ## Current Status
 - **Phase:** 7 - AI Intelligence Layer (in progress)
-- **Task:** Production deployment complete, AI pipeline ready for API keys
-- **Progress:** 90%
+- **Task:** Spireon GPS integration complete, worker fixed
+- **Progress:** 92%
 - **Blockers:** Need API keys (ANTHROPIC_API_KEY, VOYAGE_API_KEY) to run embedding pipeline
 
 ## Production Deployment ✅
@@ -31,17 +31,15 @@
 - **Date:** 2026-01-08
 - **Duration:** Continuation session
 - **Completed:**
-  - Spireon devices synced (247 devices)
-  - AI package built (claude.ts, gemini.ts, embeddings.ts, client.ts)
-  - Embedding pipeline created (pipeline.ts with content extractors)
-  - Semantic search created (search.ts with RAG)
-  - Suggestions feature created (suggestions.ts)
-  - Worker jobs added (GENERATE_EMBEDDINGS, GENERATE_SUGGESTIONS)
-  - AI tRPC router created (~400 lines, 12 endpoints)
-  - AI suggestions UI component (SuggestionsList, SuggestionsWidget)
-  - tRPC client infrastructure (trpc.ts, providers.tsx)
-  - Fixed pre-existing TypeScript errors in API router
-- **Stopped at:** AI UI complete, ready for API keys and embedding generation
+  - Spireon location polling implementation (pollCurrentLocations)
+  - Spireon GPS history backfill (backfillLocations)
+  - Spireon timeline event generation (generateTimelineEvents, 94 events)
+  - Fixed Spireon API client to properly parse lastLocation data
+  - Fixed worker pg-boss queue issue (createQueue before schedule)
+  - Added worker job types: SYNC_SPIREON_POLL, SYNC_SPIREON_BACKFILL, SYNC_SPIREON_TIMELINE
+  - Updated credentials in integration_accounts table
+  - Location records now being stored (157 records created)
+- **Stopped at:** Spireon GPS complete, worker running, ready for AI API keys
 
 ## Next Steps (Ordered)
 1. Configure API keys (ANTHROPIC_API_KEY, VOYAGE_API_KEY) for embedding generation
@@ -116,13 +114,13 @@
 
 ### Phase 5: Spireon GPS ✅ COMPLETE
 - [x] Basic Auth + X-Nspire-AppToken auth (247 assets found)
-- [x] Devices synced to database (247 devices)
-- [ ] Location polling working (pending)
-- [ ] GPS history backfill (pending)
+- [x] Devices synced to database (247 devices, 25 active)
+- [x] Location polling working (pollCurrentLocations function)
+- [x] GPS history backfill (backfillLocations function)
 - [ ] Diagnostics synced (pending)
 - [ ] Geofence created (shop location) - API returned 404
 - [ ] "At shop" detection working (pending)
-- [ ] Timeline events created (pending)
+- [x] Timeline events created (94 events, generateTimelineEvents function)
 
 ### Phase 6: WhatsApp
 - [ ] 360Dialog client
@@ -183,10 +181,8 @@
 | Monday.com  | ✅ | ✅ | ✅ | ✅ | ✅ |
 | HQ Rental   | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Gmail       | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Spireon     | ✅ | ✅ | ✅ | ✅ | ⏳ |
+| Spireon     | ✅ | ✅ | ✅ | ✅ | ✅ |
 | WhatsApp    | ❌ | ✅ | ❌ | ❌ | ❌ |
-
-⏳ = Timeline events pending
 
 ## Files Created (Phase 0)
 

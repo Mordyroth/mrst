@@ -33,6 +33,9 @@ export const JOB_TYPES = {
   SYNC_HQ_INCREMENTAL: 'sync:hq:incremental',
   SYNC_GMAIL: 'sync:gmail',
   SYNC_SPIREON: 'sync:spireon',
+  SYNC_SPIREON_POLL: 'sync:spireon:poll',
+  SYNC_SPIREON_BACKFILL: 'sync:spireon:backfill',
+  SYNC_SPIREON_TIMELINE: 'sync:spireon:timeline',
   SYNC_WHATSAPP: 'sync:whatsapp',
   // File processing
   DOWNLOAD_FILE: 'file:download',
@@ -67,6 +70,17 @@ interface HQSyncJobData {
   integrationAccountId: string
   tenantId: string
   days?: number // for incremental sync
+}
+
+interface SpireonSyncJobData {
+  integrationAccountId: string
+  tenantId: string
+}
+
+interface SpireonBackfillJobData extends SpireonSyncJobData {
+  startDate: string
+  endDate: string
+  maxDevices?: number
 }
 
 // Global instances
@@ -187,6 +201,51 @@ async function getHQClient(db: Database, integrationAccountId: string): Promise<
     tenantToken: credentials.tenantToken,
     userToken: credentials.userToken,
     baseUrl: credentials.baseUrl,
+  })
+}
+
+/**
+ * Get Spireon client for an integration account
+ */
+async function getSpireonClient(db: Database, integrationAccountId: string) {
+  const account = await db
+    .select({ credentials: integrationAccounts.credentials })
+    .from(integrationAccounts)
+    .where(
+      and(
+        eq(integrationAccounts.id, integrationAccountId),
+        eq(integrationAccounts.type, 'spireon'),
+        eq(integrationAccounts.isActive, true)
+      )
+    )
+    .limit(1)
+
+  const firstAccount = account[0]
+  if (!firstAccount) {
+    return null
+  }
+
+  const credentials = firstAccount.credentials as {
+    appToken: string
+    username: string
+    password: string
+    nspireId: string
+    identityUrl?: string
+    restUrl?: string
+  }
+
+  if (!credentials?.appToken || !credentials?.username || !credentials?.password || !credentials?.nspireId) {
+    return null
+  }
+
+  const { createSpireonClient } = await import('@mrst/integrations/spireon')
+  return createSpireonClient({
+    appToken: credentials.appToken,
+    username: credentials.username,
+    password: credentials.password,
+    nspireId: credentials.nspireId,
+    identityUrl: credentials.identityUrl,
+    restUrl: credentials.restUrl,
   })
 }
 
@@ -472,12 +531,169 @@ async function registerHandlers(boss: PgBoss, db: Database): Promise<void> {
     }
   })
 
-  // Spireon sync
-  await boss.work(JOB_TYPES.SYNC_SPIREON, { batchSize: 1 }, async (jobs) => {
+  // Spireon full sync - devices and geofences
+  await boss.work<SpireonSyncJobData>(JOB_TYPES.SYNC_SPIREON, { batchSize: 1 }, async (jobs) => {
     for (const job of jobs) {
       console.log(`[Worker] Processing ${JOB_TYPES.SYNC_SPIREON}:`, job.id)
-      // Will be implemented in Phase 5
-      return { status: 'not_implemented' }
+
+      const { integrationAccountId, tenantId } = job.data
+      const client = await getSpireonClient(db, integrationAccountId)
+
+      if (!client) {
+        console.error(`[Worker:${job.id}] Spireon client not available for account ${integrationAccountId}`)
+        return { status: 'error', error: 'Client not available' }
+      }
+
+      const schema = await import('@mrst/db/schema')
+      const { syncAll } = await import('@mrst/integrations/spireon')
+
+      try {
+        const result = await syncAll({
+          db: db as any,
+          client,
+          integrationAccountId,
+          schema: {
+            spireonDevices: schema.spireonDevices,
+            spireonLocations: schema.spireonLocations,
+            spireonGeofences: schema.spireonGeofences,
+            spireonGeofenceEvents: schema.spireonGeofenceEvents,
+          },
+        })
+
+        console.log(`[Worker:${job.id}] Spireon sync complete:`, result)
+        return { status: 'success', ...result }
+      } catch (error) {
+        console.error(`[Worker:${job.id}] Spireon sync failed:`, error)
+        return { status: 'error', error: (error as Error).message }
+      }
+    }
+  })
+
+  // Spireon location poll - update current locations for all devices
+  await boss.work<SpireonSyncJobData>(JOB_TYPES.SYNC_SPIREON_POLL, { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) {
+      console.log(`[Worker] Processing ${JOB_TYPES.SYNC_SPIREON_POLL}:`, job.id)
+
+      const { integrationAccountId, tenantId } = job.data
+      const client = await getSpireonClient(db, integrationAccountId)
+
+      if (!client) {
+        console.error(`[Worker:${job.id}] Spireon client not available for account ${integrationAccountId}`)
+        return { status: 'error', error: 'Client not available' }
+      }
+
+      const schema = await import('@mrst/db/schema')
+      const { pollCurrentLocations } = await import('@mrst/integrations/spireon')
+
+      try {
+        const result = await pollCurrentLocations({
+          db: db as any,
+          client,
+          integrationAccountId,
+          schema: {
+            spireonDevices: schema.spireonDevices,
+            spireonLocations: schema.spireonLocations,
+            spireonGeofences: schema.spireonGeofences,
+            spireonGeofenceEvents: schema.spireonGeofenceEvents,
+          },
+        })
+
+        console.log(`[Worker:${job.id}] Spireon location poll complete:`, result)
+        return { status: 'success', ...result }
+      } catch (error) {
+        console.error(`[Worker:${job.id}] Spireon location poll failed:`, error)
+        return { status: 'error', error: (error as Error).message }
+      }
+    }
+  })
+
+  // Spireon backfill - fetch historical locations
+  await boss.work<SpireonBackfillJobData>(JOB_TYPES.SYNC_SPIREON_BACKFILL, { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) {
+      console.log(`[Worker] Processing ${JOB_TYPES.SYNC_SPIREON_BACKFILL}:`, job.id)
+
+      const { integrationAccountId, tenantId, startDate, endDate, maxDevices } = job.data
+      const client = await getSpireonClient(db, integrationAccountId)
+
+      if (!client) {
+        console.error(`[Worker:${job.id}] Spireon client not available for account ${integrationAccountId}`)
+        return { status: 'error', error: 'Client not available' }
+      }
+
+      const schema = await import('@mrst/db/schema')
+      const { backfillLocations } = await import('@mrst/integrations/spireon')
+
+      try {
+        const result = await backfillLocations(
+          {
+            db: db as any,
+            client,
+            integrationAccountId,
+            schema: {
+              spireonDevices: schema.spireonDevices,
+              spireonLocations: schema.spireonLocations,
+              spireonGeofences: schema.spireonGeofences,
+              spireonGeofenceEvents: schema.spireonGeofenceEvents,
+            },
+          },
+          {
+            startDate: new Date(startDate),
+            endDate: new Date(endDate),
+            maxDevices,
+          }
+        )
+
+        console.log(`[Worker:${job.id}] Spireon backfill complete:`, result)
+        return { status: 'success', ...result }
+      } catch (error) {
+        console.error(`[Worker:${job.id}] Spireon backfill failed:`, error)
+        return { status: 'error', error: (error as Error).message }
+      }
+    }
+  })
+
+  // Spireon timeline event generation
+  await boss.work<SpireonSyncJobData>(JOB_TYPES.SYNC_SPIREON_TIMELINE, { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) {
+      console.log(`[Worker] Processing ${JOB_TYPES.SYNC_SPIREON_TIMELINE}:`, job.id)
+
+      const { integrationAccountId, tenantId } = job.data
+      const client = await getSpireonClient(db, integrationAccountId)
+
+      if (!client) {
+        console.error(`[Worker:${job.id}] Spireon client not available for account ${integrationAccountId}`)
+        return { status: 'error', error: 'Client not available' }
+      }
+
+      const schema = await import('@mrst/db/schema')
+      const { generateTimelineEvents } = await import('@mrst/integrations/spireon')
+
+      try {
+        const result = await generateTimelineEvents({
+          db: db as any,
+          client,
+          integrationAccountId,
+          tenantId,
+          schema: {
+            spireonDevices: schema.spireonDevices,
+            spireonLocations: schema.spireonLocations,
+            spireonGeofences: schema.spireonGeofences,
+            spireonGeofenceEvents: schema.spireonGeofenceEvents,
+          },
+          timelineConfig: {
+            timelineEvents: schema.timelineEvents,
+            timelineEventLinks: schema.timelineEventLinks,
+            coreVehicles: schema.coreVehicles,
+            tenants: schema.tenants,
+          },
+        })
+
+        console.log(`[Worker:${job.id}] Spireon timeline events complete:`, result)
+        return { status: 'success', ...result }
+      } catch (error) {
+        console.error(`[Worker:${job.id}] Spireon timeline events failed:`, error)
+        return { status: 'error', error: (error as Error).message }
+      }
     }
   })
 
@@ -547,6 +763,8 @@ async function registerHandlers(boss: PgBoss, db: Database): Promise<void> {
   })
 
   // Session cleanup (runs every hour)
+  // Create the queue first (required in pg-boss v10)
+  await boss.createQueue(JOB_TYPES.CLEANUP_EXPIRED_SESSIONS)
   await boss.schedule(JOB_TYPES.CLEANUP_EXPIRED_SESSIONS, '0 * * * *', {})
   await boss.work(JOB_TYPES.CLEANUP_EXPIRED_SESSIONS, { batchSize: 1 }, async (jobs) => {
     for (const job of jobs) {

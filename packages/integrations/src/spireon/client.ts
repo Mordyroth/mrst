@@ -213,39 +213,51 @@ export function createSpireonClient(config: SpireonConfig): SpireonClient {
       const devices = data.content || data.data || []
       const total = data.total || devices.length
 
-      const content = devices.map((d: any) => ({
-        deviceId: String(d.deviceId || d.id || d.DeviceId),
-        deviceName: d.deviceName || d.name || d.DeviceName || '',
-        serialNumber: d.serialNumber || d.SerialNumber || '',
-        imei: d.imei || d.IMEI || '',
-        deviceType: d.deviceType || d.DeviceType || '',
-        vehicleName: d.vehicleName || d.vehicle?.name || d.VehicleName || '',
-        vehicleVin: d.vehicleVin || d.vehicle?.vin || d.VIN || '',
-        vehicleLicensePlate: d.vehicleLicensePlate || d.vehicle?.licensePlate || d.LicensePlate || '',
-        vehicleYear: parseInt(d.vehicleYear || d.vehicle?.year || d.Year) || 0,
-        vehicleMake: d.vehicleMake || d.vehicle?.make || d.Make || '',
-        vehicleModel: d.vehicleModel || d.vehicle?.model || d.Model || '',
-        status: d.status || d.Status || 'unknown',
-        isOnline: d.isOnline || d.online || false,
-        lastCommunication: d.lastCommunication || d.lastEventTime || d.LastCommunication || null,
-        lastLocation: d.lastLocation ? {
-          lat: d.lastLocation.latitude || d.lastLocation.lat,
-          lng: d.lastLocation.longitude || d.lastLocation.lng,
-          altitude: d.lastLocation.altitude || null,
-          speed: d.lastLocation.speed || 0,
-          heading: d.lastLocation.heading || 0,
-          address: d.lastLocation.address || null,
-          city: d.lastLocation.city || null,
-          state: d.lastLocation.state || null,
-          zipCode: d.lastLocation.zipCode || null,
-          eventType: d.lastLocation.eventType || 'location',
-          recordedAt: d.lastLocation.timestamp || d.lastLocation.recordedAt,
-          odometer: d.lastLocation.odometer || null,
-          ignitionOn: d.lastLocation.ignitionOn || false,
-          raw: d.lastLocation,
-        } : null,
-        raw: d,
-      }))
+      const content = devices.map((d: any) => {
+        // Parse lastLocation with different possible structures
+        let lastLocation: SpireonLocation | null = null
+        if (d.lastLocation) {
+          const loc = d.lastLocation
+          const addr = loc.address || {}
+          lastLocation = {
+            lat: loc.latitude || loc.lat,
+            lng: loc.longitude || loc.lng,
+            altitude: loc.altitude || null,
+            speed: d.speed || loc.speed || 0,
+            heading: loc.heading || 0,
+            // Address can be an object or string
+            address: typeof addr === 'string' ? addr : addr.line1 || null,
+            city: typeof addr === 'string' ? null : (addr.city || null),
+            state: typeof addr === 'string' ? null : (addr.stateOrProvince || addr.state || null),
+            zipCode: typeof addr === 'string' ? null : (addr.postalCode || addr.zipCode || null),
+            eventType: loc.eventType || d.status || 'location',
+            // Timestamp can be in multiple places
+            recordedAt: d.locationLastReported || loc.timestamp || loc.recordedAt || null,
+            odometer: d.odometer || loc.odometer || null,
+            ignitionOn: loc.ignitionOn || d.ignitionOn || false,
+            raw: d.lastLocation,
+          }
+        }
+
+        return {
+          deviceId: String(d.deviceId || d.id || d.DeviceId),
+          deviceName: d.deviceName || d.name || d.DeviceName || '',
+          serialNumber: d.serialNumber || d.description || d.SerialNumber || '',
+          imei: d.imei || d.IMEI || '',
+          deviceType: d.deviceType || d.DeviceType || '',
+          vehicleName: d.vehicleName || d.vehicle?.name || d.VehicleName || d.name || '',
+          vehicleVin: d.vehicleVin || d.vehicle?.vin || d.VIN || d.vin || '',
+          vehicleLicensePlate: d.vehicleLicensePlate || d.vehicle?.licensePlate || d.LicensePlate || d.attributes?.licensePlate || '',
+          vehicleYear: parseInt(d.vehicleYear || d.vehicle?.year || d.Year || d.year) || 0,
+          vehicleMake: d.vehicleMake || d.vehicle?.make || d.Make || d.make || '',
+          vehicleModel: d.vehicleModel || d.vehicle?.model || d.Model || d.model || '',
+          status: d.status || d.Status || 'unknown',
+          isOnline: d.isOnline || d.active || d.online || false,
+          lastCommunication: d.locationLastReported || d.lastCommunication || d.lastEventTime || d.LastCommunication || null,
+          lastLocation,
+          raw: d,
+        }
+      })
 
       return { content, total }
     },
