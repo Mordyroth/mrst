@@ -4,22 +4,23 @@
 
 ## Current Status
 - **Phase:** 4 - Gmail Mirror
-- **Task:** Gmail client setup
-- **Progress:** 0%
-- **Blockers:** None
+- **Task:** Domain-wide delegation configuration
+- **Progress:** 40%
+- **Blockers:** Service account needs domain-wide delegation setup in Google Admin Console
 
 ## Last Session
 - **Date:** 2026-01-08
-- **Duration:** ~6 hours
-- **Completed:** Phase 2 complete, Timeline generation, Timeline API
-- **Stopped at:** Timeline UI component remaining
+- **Duration:** ~8 hours
+- **Completed:** Phase 3 complete, Gmail client/sync/schema created
+- **Stopped at:** Waiting for Google Workspace domain-wide delegation configuration
 
 ## Next Steps (Ordered)
-1. Create Gmail client with service account auth
-2. Sync labels and threads
-3. Sync messages and attachments (filter junk attachments)
-4. Implement file preview components (cross-cutting requirement)
+1. Configure domain-wide delegation in Google Workspace Admin
+2. Test Gmail client with actual admin email
+3. Sync labels and threads
+4. Sync messages and attachments (filter junk attachments)
 5. Create history-based incremental sync
+6. Create timeline events from emails
 
 ## Phase Checklist
 
@@ -69,11 +70,15 @@
 - [x] Mirroring validated (3,250 events linked to core_customers and core_vehicles)
 
 ### Phase 4: Gmail Mirror
-- [ ] Gmail client (service account auth)
+- [x] Gmail schema created (5 tables)
+- [x] Gmail client with service account auth
+- [x] Gmail sync service (labels, threads, messages, attachments)
+- [x] Junk attachment filtering logic
+- [ ] Domain-wide delegation configured (BLOCKED - Google Admin setup needed)
 - [ ] Labels synced
-- [ ] Threads synced (all 10 accounts)
+- [ ] Threads synced (all mailboxes discovered via Admin SDK)
 - [ ] Messages synced
-- [ ] Attachments downloaded
+- [ ] Attachments downloaded (with junk filtering)
 - [ ] History-based incremental sync
 - [ ] Gap handling (historyId too old)
 - [ ] Timeline events created
@@ -138,9 +143,11 @@
 |-------------|--------|--------|----------|--------|----------|
 | Monday.com  | ✅ | ✅ | ✅ | ✅ | ✅ |
 | HQ Rental   | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Gmail       | ❌ | ✅ | ❌ | ❌ | ❌ |
+| Gmail       | ✅ | ✅ | ⏳ | ⏳ | ❌ |
 | Spireon     | ❌ | ✅ | ❌ | ❌ | ❌ |
 | WhatsApp    | ❌ | ✅ | ❌ | ❌ | ❌ |
+
+⏳ = Waiting for Google Workspace domain-wide delegation configuration
 
 ## Files Created (Phase 0)
 
@@ -321,25 +328,40 @@ Timeline Events Generated:
   Event links:        16,762
 ```
 
-## Notes for Next Session
-Phase 3 Timeline v1 is COMPLETE. Ready for Phase 4: Gmail Mirror.
+## Files Created (Phase 4)
 
-Timeline summary:
+### packages/integrations/src/gmail/
+- client.ts (Gmail/Admin SDK client with domain-wide delegation - 193 lines)
+- types.ts (Gmail types, junk attachment filtering - 264 lines)
+- sync.ts (Sync service: labels, threads, messages, attachments - 650 lines)
+- test-sync.ts (Test script with mailbox discovery)
+- index.ts (Module exports)
+
+## Notes for Next Session
+Phase 4 Gmail Mirror is IN PROGRESS (40% complete).
+
+**BLOCKER:** Google Workspace domain-wide delegation needs to be configured:
+1. Go to Google Workspace Admin (admin.google.com)
+2. Security → API controls → Domain-wide delegation
+3. Add the service account client ID with scopes:
+   - `https://www.googleapis.com/auth/gmail.readonly`
+   - `https://www.googleapis.com/auth/gmail.metadata`
+   - `https://www.googleapis.com/auth/admin.directory.user.readonly`
+4. Use a valid super admin email (not admin@travelautorental.com - that failed)
+
+Service account: `travelauto-email-service@travelauto-email-integration.iam.gserviceaccount.com`
+
+Code completed:
+- Gmail client with service account authentication (domain-wide delegation)
+- Admin SDK integration to discover ALL mailboxes across domains
+- Full sync for labels, threads, messages
+- Attachment filtering (keeps PDFs/docs/real content, filters junk icons/pixels)
+- Database schema (5 tables: accounts, labels, threads, messages, attachments)
+
+Timeline summary (Phase 3):
 - 3,762 total timeline events (512 Monday, 3,250 HQ)
 - 16,762 event links connecting to core entities
 - Timeline UI with filtering, collapse grouping, and pagination
-- All HQ reservations linked to core_customers and core_vehicles
-
-Cross-cutting requirements added:
-- Gmail attachment filtering (keep real content, filter junk)
-- File preview components (large previews, not just links)
-- Grouped media display (gallery style)
-- PDF inline preview with fullscreen viewer (requires Puppeteer tests)
-
-Core table summary:
-- 2,285 core_customers (from 2,383 HQ customers - 98 merged)
-- 242 core_vehicles (from 243 HQ vehicles - 1 merged)
-- 2,626 external_links total
 
 TypeScript strictness: Some TS errors in Monday.com sync code due to noUncheckedIndexedAccess.
-HQ code uses proper null checks and type assertions.
+Gmail code uses proper null checks and type assertions.

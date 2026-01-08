@@ -1,7 +1,9 @@
 /**
- * Gmail integration client
- * Uses Google API with service account authentication
+ * Gmail Integration
+ * Uses Google Service Account with domain-wide delegation
+ * Discovers all mailboxes via Admin SDK and syncs Gmail data
  */
 
-// Will be implemented in Phase 4
-export const GMAIL_CLIENT_VERSION = '0.1.0'
+export * from './client'
+export * from './types'
+export * from './sync'

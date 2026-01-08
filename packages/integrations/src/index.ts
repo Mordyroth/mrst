@@ -4,9 +4,9 @@
 
 export * from './monday/index'
 export * from './hq/index'
-export * from './gmail/index'
 export * from './spireon/index'
 export * from './whatsapp/index'
 
-// Timeline service (namespaced to avoid conflicts)
+// Namespace exports to avoid conflicts with common names (SyncResult, syncAll)
+export * as gmail from './gmail/index'
 export * as timeline from './timeline/index'
