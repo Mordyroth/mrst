@@ -3,9 +3,9 @@
 > This file is the source of truth for project state. Read this first every session.
 
 ## Current Status
-- **Phase:** 3 - Timeline v1
-- **Task:** Mirroring validation
-- **Progress:** 98%
+- **Phase:** 4 - Gmail Mirror
+- **Task:** Gmail client setup
+- **Progress:** 0%
 - **Blockers:** None
 
 ## Last Session
@@ -15,10 +15,11 @@
 - **Stopped at:** Timeline UI component remaining
 
 ## Next Steps (Ordered)
-1. Create Timeline UI component
-2. Test timeline queries with real data
-3. Add collapse grouping for consecutive events
-4. Begin Phase 4: Gmail Mirror
+1. Create Gmail client with service account auth
+2. Sync labels and threads
+3. Sync messages and attachments (filter junk attachments)
+4. Implement file preview components (cross-cutting requirement)
+5. Create history-based incremental sync
 
 ## Phase Checklist
 
@@ -58,14 +59,14 @@
 - [x] core_vehicles populated (242 created, 1 linked)
 - [x] external_links created (2,383 customer links, 243 vehicle links)
 
-### Phase 3: Timeline v1 ⏳ IN PROGRESS (98%)
+### Phase 3: Timeline v1 ✅ COMPLETE
 - [x] timeline_events from Monday (512 activity events, 215 value changes)
 - [x] timeline_events from HQ (3,250 reservation events)
 - [x] timeline_event_links created (16,762 links)
 - [x] Timeline API endpoint (list, get, forCustomer, forVehicle, stats, expandGroup)
 - [x] Timeline UI component (Timeline, TimelineEvent, TimelineFilters, TimelineCompact)
 - [x] Collapse grouping for consecutive events (API + UI toggle)
-- [ ] Mirroring validated via timeline
+- [x] Mirroring validated (3,250 events linked to core_customers and core_vehicles)
 
 ### Phase 4: Gmail Mirror
 - [ ] Gmail client (service account auth)
@@ -103,6 +104,34 @@
 - [ ] Natural language query engine
 - [ ] "What should I do next?" endpoint
 - [ ] Vehicle image generation
+
+## Cross-Cutting Requirements (All Phases)
+
+### Gmail Attachments
+- Download EVERY attachment from every email
+- Filter OUT junk: company logos, email signature icons, tracking pixels, legal footers, virus warnings, unsubscribe images, social media icons
+- Keep: documents, PDFs, actual content images, spreadsheets, any file over 50KB
+- Store in S3 with proper organization
+
+### File and Image Previews (Entire App)
+- Never show just a link - always show large nice preview
+- Images display big enough to see clearly without clicking
+- PDFs show first page large and readable
+- Documents show meaningful preview not just an icon
+
+### Grouped Media Display
+- Display multiple images/files from same source as a group
+- Group sources: all attachments in one email, all files in one Monday column, all files in one Monday update, consecutive WhatsApp messages, consecutive text messages
+- Display groups in gallery style
+
+### PDF and Document Handling (CRITICAL)
+- PDFs must preview inline showing first page large and clear
+- Click to open full screen viewer inside the app
+- Option to open in new tab
+- Applies to ALL PDFs/docs from everywhere: Monday, HQ, Gmail, WhatsApp, uploads
+- Test extensively with Puppeteer
+- Write tests for every PDF scenario: preview renders, fullscreen opens, new tab works, multiple pages navigate, zoom works
+- This feature requires thorough testing before marking complete
 
 ## Integration Status
 | Integration | Client | Schema | Sync Job | Tested | Timeline |
@@ -293,12 +322,19 @@ Timeline Events Generated:
 ```
 
 ## Notes for Next Session
-Phase 3 Timeline v1 is 95% complete.
-- Timeline generation service complete
-- Timeline API endpoints complete
-- Timeline UI components complete (Timeline, TimelineEvent, TimelineFilters, TimelineCompact)
-- Timeline page created at /timeline
-- Remaining: collapse grouping, validation testing
+Phase 3 Timeline v1 is COMPLETE. Ready for Phase 4: Gmail Mirror.
+
+Timeline summary:
+- 3,762 total timeline events (512 Monday, 3,250 HQ)
+- 16,762 event links connecting to core entities
+- Timeline UI with filtering, collapse grouping, and pagination
+- All HQ reservations linked to core_customers and core_vehicles
+
+Cross-cutting requirements added:
+- Gmail attachment filtering (keep real content, filter junk)
+- File preview components (large previews, not just links)
+- Grouped media display (gallery style)
+- PDF inline preview with fullscreen viewer (requires Puppeteer tests)
 
 Core table summary:
 - 2,285 core_customers (from 2,383 HQ customers - 98 merged)
