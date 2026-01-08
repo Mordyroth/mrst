@@ -23,6 +23,7 @@ import {
   aiConversations,
   aiMessages,
   embeddings,
+  spireonDevices,
   type UserRole,
   type TimelineEventType,
 } from '@mrst/db/schema'
@@ -1329,6 +1330,117 @@ const aiRouter = t.router({
     }),
 })
 
+// Vehicles router - GPS locations and fleet data
+// Shows Spireon GPS devices (filters out inactive devices by default)
+const vehiclesRouter = t.router({
+  // Get all vehicles with current GPS location
+  listWithLocation: publicProcedure
+    .input(z.object({
+      limit: z.number().min(1).max(500).default(100),
+      activeOnly: z.boolean().default(true),
+    }).optional())
+    .query(async ({ ctx, input }) => {
+      const { limit = 100, activeOnly = true } = input || {}
+
+      // Build filter conditions
+      const conditions = []
+
+      if (activeOnly) {
+        conditions.push(eq(spireonDevices.isOnline, true))
+      }
+
+      // Filter out devices with "inactive" in their name
+      conditions.push(sql`${spireonDevices.name} NOT ILIKE '%inactive%'`)
+
+      const devices = await ctx.db.select({
+        id: spireonDevices.id,
+        name: spireonDevices.name,
+        vehicleVin: spireonDevices.vehicleVin,
+        vehicleMake: spireonDevices.vehicleMake,
+        vehicleModel: spireonDevices.vehicleModel,
+        vehicleYear: spireonDevices.vehicleYear,
+        vehicleLicensePlate: spireonDevices.vehicleLicensePlate,
+        currentLat: spireonDevices.currentLat,
+        currentLng: spireonDevices.currentLng,
+        currentAddress: spireonDevices.currentAddress,
+        currentSpeed: spireonDevices.currentSpeed,
+        currentLocationAt: spireonDevices.currentLocationAt,
+        ignitionOn: spireonDevices.ignitionOn,
+        isOnline: spireonDevices.isOnline,
+        status: spireonDevices.status,
+      })
+        .from(spireonDevices)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(spireonDevices.currentLocationAt))
+        .limit(limit)
+
+      return {
+        vehicles: devices.map(d => {
+          // Parse unit number from device name (e.g., "V347 2019 Grey Altima" -> "V347")
+          const unitMatch = d.name?.match(/^(V\d+)\s/)
+          const unitNumber = unitMatch ? unitMatch[1] : null
+
+          return {
+            id: d.id,
+            name: d.name,
+            vin: d.vehicleVin,
+            make: d.vehicleMake,
+            model: d.vehicleModel,
+            year: d.vehicleYear,
+            licensePlate: d.vehicleLicensePlate,
+            unitNumber,
+            hqStatus: null, // Would be populated if we had VIN matching
+            location: d.currentLat && d.currentLng && d.currentLat > -90 && d.currentLat < 90 && d.currentLng > -180 && d.currentLng < 180 ? {
+              lat: d.currentLat,
+              lng: d.currentLng,
+              address: d.currentAddress,
+              speed: d.currentSpeed,
+              updatedAt: d.currentLocationAt,
+            } : null,
+            ignitionOn: d.ignitionOn,
+            isOnline: d.isOnline,
+            status: d.status,
+          }
+        }),
+        total: devices.length,
+      }
+    }),
+
+  // Get summary stats for fleet
+  stats: publicProcedure.query(async ({ ctx }) => {
+    // Base filter: exclude inactive devices
+    const baseCondition = sql`${spireonDevices.name} NOT ILIKE '%inactive%'`
+
+    // Count total active devices
+    const totalResult = await ctx.db.select({ count: sql<number>`count(*)` })
+      .from(spireonDevices)
+      .where(baseCondition)
+
+    // Count online devices
+    const activeResult = await ctx.db.select({ count: sql<number>`count(*)` })
+      .from(spireonDevices)
+      .where(and(baseCondition, eq(spireonDevices.isOnline, true)))
+
+    // Count devices with recent location (last 24h)
+    const recentDate = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    const recentResult = await ctx.db.select({ count: sql<number>`count(*)` })
+      .from(spireonDevices)
+      .where(and(baseCondition, gte(spireonDevices.currentLocationAt, recentDate)))
+
+    // Count devices with ignition on
+    const movingResult = await ctx.db.select({ count: sql<number>`count(*)` })
+      .from(spireonDevices)
+      .where(and(baseCondition, eq(spireonDevices.ignitionOn, true)))
+
+    return {
+      total: Number(totalResult[0]?.count || 0),
+      active: Number(activeResult[0]?.count || 0),
+      recentLocation: Number(recentResult[0]?.count || 0),
+      moving: Number(movingResult[0]?.count || 0),
+    }
+  }),
+})
+
 // Main router
 export const appRouter = t.router({
   auth: authRouter,
@@ -1338,6 +1450,7 @@ export const appRouter = t.router({
   users: usersRouter,
   timeline: timelineRouter,
   ai: aiRouter,
+  vehicles: vehiclesRouter,
 })
 
 export type AppRouter = typeof appRouter
