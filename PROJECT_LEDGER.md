@@ -4,9 +4,9 @@
 
 ## Current Status
 - **Phase:** 4 - Gmail Mirror
-- **Task:** Attachment download to S3
-- **Progress:** 95%
-- **Blockers:** AWS credentials not configured (needed for S3 upload)
+- **Task:** History-based incremental sync
+- **Progress:** 98%
+- **Blockers:** None
 
 ## Last Session
 - **Date:** 2026-01-08
@@ -78,7 +78,7 @@
 - [x] Messages synced (14,893 messages)
 - [x] Attachments filtered and recorded (6,591 attachments: 4,491 PDFs, 773 JPEGs, 604 PNGs)
 - [x] Timeline events created (14,893 events: 9,929 received, 4,964 sent)
-- [ ] Attachments downloaded to S3
+- [x] Attachments downloaded to S3 (6,591 files, 2.2 GiB)
 - [ ] History-based incremental sync
 - [ ] Gap handling (historyId too old)
 - [ ] certifiedautocollision.com domain (needs DWD setup)
