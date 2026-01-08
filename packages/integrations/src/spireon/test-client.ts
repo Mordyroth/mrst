@@ -1,6 +1,8 @@
 /**
  * Test Spireon API connection
  * Run with: npx tsx packages/integrations/src/spireon/test-client.ts
+ *
+ * Uses Basic Auth + X-Nspire-AppToken header (matching archive implementation)
  */
 
 import { createSpireonClient, SpireonConfig } from './client'
@@ -17,38 +19,39 @@ const config: SpireonConfig = {
 
 async function main() {
   console.log('=== Spireon API Test ===\n')
+  console.log('Using Basic Auth + X-Nspire-AppToken (matching archive)\n')
 
   const client = createSpireonClient(config)
 
   try {
-    // Test getting devices
-    console.log('Fetching devices...')
-    const devices = await client.getDevices()
-    console.log(`Found ${devices.length} devices\n`)
+    // Test getting assets (devices)
+    console.log('Fetching assets...')
+    const { content: assets, total } = await client.getAssets({ limit: 50 })
+    console.log(`Found ${assets.length} assets (total: ${total})\n`)
 
-    if (devices.length > 0) {
-      console.log('First 5 devices:')
-      for (const device of devices.slice(0, 5)) {
-        console.log(`  - ${device.deviceName} (${device.deviceId})`)
-        console.log(`    Vehicle: ${device.vehicleYear} ${device.vehicleMake} ${device.vehicleModel}`)
-        console.log(`    VIN: ${device.vehicleVin}`)
-        console.log(`    Status: ${device.status}, Online: ${device.isOnline}`)
-        if (device.lastLocation) {
-          console.log(`    Last location: ${device.lastLocation.lat}, ${device.lastLocation.lng}`)
-          console.log(`    Address: ${device.lastLocation.address || 'N/A'}`)
+    if (assets.length > 0) {
+      console.log('First 5 assets:')
+      for (const asset of assets.slice(0, 5)) {
+        console.log(`  - ${asset.deviceName || asset.vehicleName} (ID: ${asset.deviceId})`)
+        console.log(`    Vehicle: ${asset.vehicleYear} ${asset.vehicleMake} ${asset.vehicleModel}`)
+        console.log(`    VIN: ${asset.vehicleVin}`)
+        console.log(`    Status: ${asset.status}, Online: ${asset.isOnline}`)
+        if (asset.lastLocation) {
+          console.log(`    Last location: ${asset.lastLocation.lat}, ${asset.lastLocation.lng}`)
+          console.log(`    Address: ${asset.lastLocation.address || 'N/A'}`)
         }
         console.log('')
       }
 
-      // Test getting location history for first device
-      const firstDevice = devices[0]
-      if (firstDevice) {
-        console.log(`\nFetching location history for ${firstDevice.deviceName}...`)
+      // Test getting location history for first asset
+      const firstAsset = assets[0]
+      if (firstAsset) {
+        console.log(`\nFetching location history for ${firstAsset.deviceName || firstAsset.vehicleName}...`)
         const endDate = new Date()
         const startDate = new Date(endDate.getTime() - 24 * 60 * 60 * 1000) // Last 24 hours
 
         try {
-          const locations = await client.getDeviceLocations(firstDevice.deviceId, startDate, endDate)
+          const locations = await client.getDeviceLocations(firstAsset.deviceId, startDate, endDate)
           console.log(`Found ${locations.length} location records in last 24 hours`)
 
           if (locations.length > 0) {
@@ -101,8 +104,10 @@ async function main() {
 
   } catch (err: any) {
     console.error('\nError:', err.message)
-    if (err.message.includes('auth')) {
-      console.error('\nAuthentication failed. Check credentials.')
+    if (err.message.includes('401')) {
+      console.error('\nAuthentication failed (401).')
+      console.error('Tried: Basic Auth + X-Nspire-AppToken header')
+      console.error('Check if credentials are still valid.')
     }
   }
 }

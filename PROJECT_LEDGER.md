@@ -3,10 +3,10 @@
 > This file is the source of truth for project state. Read this first every session.
 
 ## Current Status
-- **Phase:** 5 - Spireon GPS (BLOCKED)
-- **Task:** OAuth authentication
-- **Progress:** 5%
-- **Blockers:** Spireon API credentials invalid/expired
+- **Phase:** 5 - Spireon GPS (in progress)
+- **Task:** Sync devices and locations
+- **Progress:** 30%
+- **Blockers:** None - auth fixed!
 
 ## Outstanding Issues
 1. **certifiedautocollision.com Gmail**: DWD not configured for service account
@@ -15,11 +15,10 @@
    - Client ID: `113685960413666521570`
    - Scope: `https://www.googleapis.com/auth/gmail.readonly`
 
-2. **Spireon GPS API**: Authentication failing with 401
-   - Tested all OAuth2 grant types: password, client_credentials, with/without scope
-   - All return HTTP 401 with empty body
-   - Credentials from API_CREDENTIALS.md appear expired/invalid
-   - Need fresh credentials from Spireon/NSpire portal
+2. **Spireon GPS API**: ✅ FIXED
+   - Issue: Was using OAuth2 password grant (wrong)
+   - Fix: Use Basic Auth + X-Nspire-AppToken header + /assets endpoint
+   - Now working: 247 assets found
 
 ## Last Session
 - **Date:** 2026-01-08
@@ -101,8 +100,8 @@
 - [ ] certifiedautocollision.com domain (blocked - needs DWD setup)
 
 ### Phase 5: Spireon GPS
-- [ ] OAuth token flow
-- [ ] Devices synced
+- [x] Basic Auth + X-Nspire-AppToken auth (247 assets found)
+- [ ] Devices synced to database
 - [ ] Location polling working
 - [ ] GPS history backfill
 - [ ] Diagnostics synced
@@ -161,7 +160,7 @@
 | Monday.com  | ✅ | ✅ | ✅ | ✅ | ✅ |
 | HQ Rental   | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Gmail       | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Spireon     | ❌ | ✅ | ❌ | ❌ | ❌ |
+| Spireon     | ✅ | ✅ | ❌ | ✅ | ❌ |
 | WhatsApp    | ❌ | ✅ | ❌ | ❌ | ❌ |
 
 ⏳ = Timeline events pending
@@ -368,17 +367,22 @@ Timeline Events Generated:
 - index.ts (Module exports)
 
 ## Notes for Next Session
-Phase 5 Spireon GPS is BLOCKED - credentials from API_CREDENTIALS.md are invalid/expired.
+Phase 5 Spireon GPS auth is working! 247 assets found.
 
-**What's Needed:**
-1. Fresh Spireon/NSpire credentials from the portal
-2. certifiedautocollision.com DWD setup in Google Admin Console
+**Spireon Auth Fix:**
+- Problem: Was using OAuth2 password grant (wrong approach)
+- Solution: Use Basic Auth + X-Nspire-AppToken header + /assets endpoint
+- This matches the archive implementation in `api/spireon_proxy.php`
 
-**Spireon Client Status:**
-- Client code created: `packages/integrations/src/spireon/client.ts`
-- Test script created: `packages/integrations/src/spireon/test-client.ts`
-- Auth tested with multiple grant types (password, client_credentials)
-- All return HTTP 401 with empty body - credentials are expired
+**Next Steps for Spireon:**
+1. Create sync service to save assets to database
+2. Implement location polling (every 30-60 seconds)
+3. Create geofence for shop location
+4. Implement "at shop" detection
+5. Generate timeline events
+
+**Outstanding:**
+- certifiedautocollision.com Gmail: Needs DWD setup in Google Admin Console
 
 **Test Scripts:**
 - `npx tsx packages/integrations/src/spireon/test-client.ts` - Test Spireon connection

@@ -31,3 +31,6 @@ export * from './core'
 
 // Timeline
 export * from './timeline'
+
+// AI Intelligence Layer
+export * from './ai'

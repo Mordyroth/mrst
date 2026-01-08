@@ -1,6 +1,7 @@
 /**
  * Spireon / NSpire GPS API Client
- * Uses OAuth2 password grant for authentication
+ * Uses Basic Auth + X-Nspire-AppToken header for authentication
+ * Based on working implementation from travelauto archive
  */
 
 export interface SpireonConfig {
@@ -9,11 +10,11 @@ export interface SpireonConfig {
   appToken: string
   username: string
   password: string
-  nspireId: string
+  nspireId: string // Also called account_id
 }
 
 export interface SpireonClient {
-  getDevices(): Promise<SpireonDevice[]>
+  getAssets(options?: { limit?: number; offset?: number; active?: boolean }): Promise<{ content: SpireonDevice[]; total: number }>
   getDevice(deviceId: string): Promise<SpireonDevice>
   getDeviceLocations(deviceId: string, startDate: Date, endDate: Date): Promise<SpireonLocation[]>
   getDeviceTrips(deviceId: string, startDate: Date, endDate: Date): Promise<SpireonTrip[]>
@@ -96,77 +97,96 @@ export interface SpireonAlert {
   raw: Record<string, unknown>
 }
 
-// Token cache
+// JWT token cache
 let tokenCache: {
-  accessToken: string
+  token: string
   expiresAt: number
 } | null = null
 
 /**
- * Get OAuth2 access token
+ * Get Basic Auth header value
  */
-async function getAccessToken(config: SpireonConfig): Promise<string> {
+function getBasicAuth(config: SpireonConfig): string {
+  return Buffer.from(`${config.username}:${config.password}`).toString('base64')
+}
+
+/**
+ * Get JWT token from identity endpoint (optional - can use Basic Auth directly)
+ */
+async function getJwtToken(config: SpireonConfig): Promise<string | null> {
   const now = Date.now()
 
   // Return cached token if still valid (with 60 second buffer)
   if (tokenCache && tokenCache.expiresAt > now + 60000) {
-    return tokenCache.accessToken
+    return tokenCache.token
   }
 
   const identityUrl = config.identityUrl || 'https://identity.spireon.com/identity/token'
 
-  const response = await fetch(identityUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      grant_type: 'password',
-      client_id: config.appToken,
-      username: config.username,
-      password: config.password,
-    }).toString(),
-  })
+  try {
+    const response = await fetch(identityUrl, {
+      method: 'POST',
+      headers: {
+        'X-Nspire-AppToken': config.appToken,
+        'Authorization': `Basic ${getBasicAuth(config)}`,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+    })
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`Spireon auth failed: ${response.status} ${errorText}`)
+    if (!response.ok) {
+      // JWT auth failed, will fall back to Basic Auth
+      return null
+    }
+
+    const data = await response.json() as { token?: string; expires_in?: number }
+
+    if (data.token) {
+      tokenCache = {
+        token: data.token,
+        expiresAt: now + ((data.expires_in || 3600) * 1000),
+      }
+      return tokenCache.token
+    }
+  } catch {
+    // JWT auth failed, will fall back to Basic Auth
   }
 
-  const data = await response.json() as {
-    access_token: string
-    expires_in: number
-    token_type: string
-  }
-
-  tokenCache = {
-    accessToken: data.access_token,
-    expiresAt: now + (data.expires_in * 1000),
-  }
-
-  return tokenCache.accessToken
+  return null
 }
 
 /**
  * Make authenticated API request
+ * Uses JWT Bearer token if available, otherwise falls back to Basic Auth
  */
 async function apiRequest<T>(
   config: SpireonConfig,
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const token = await getAccessToken(config)
   const restUrl = config.restUrl || 'https://services.spireon.com/v0/rest'
-
   const url = `${restUrl}${endpoint}`
+
+  // Try JWT first
+  const jwtToken = await getJwtToken(config)
+
+  const headers: Record<string, string> = {
+    'X-Nspire-AppToken': config.appToken,
+    'Accept': 'application/json',
+  }
+
+  if (jwtToken) {
+    headers['Authorization'] = `Bearer ${jwtToken}`
+  } else {
+    // Fall back to Basic Auth (works per the archive code)
+    headers['Authorization'] = `Basic ${getBasicAuth(config)}`
+  }
 
   const response = await fetch(url, {
     ...options,
     headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'NSpire-Id': config.nspireId,
-      ...options.headers,
+      ...headers,
+      ...options.headers as Record<string, string>,
     },
   })
 
@@ -183,11 +203,17 @@ async function apiRequest<T>(
  */
 export function createSpireonClient(config: SpireonConfig): SpireonClient {
   return {
-    async getDevices(): Promise<SpireonDevice[]> {
-      const data = await apiRequest<any>(config, '/devices')
-      const devices = Array.isArray(data) ? data : (data.devices || data.data || [])
+    async getAssets(options: { limit?: number; offset?: number; active?: boolean } = {}): Promise<{ content: SpireonDevice[]; total: number }> {
+      const params = new URLSearchParams()
+      params.set('limit', String(options.limit ?? 100))
+      params.set('offset', String(options.offset ?? 0))
+      // Note: active filter is unreliable per archive code, filter in app instead
 
-      return devices.map((d: any) => ({
+      const data = await apiRequest<any>(config, `/assets?${params}`)
+      const devices = data.content || data.data || []
+      const total = data.total || devices.length
+
+      const content = devices.map((d: any) => ({
         deviceId: String(d.deviceId || d.id || d.DeviceId),
         deviceName: d.deviceName || d.name || d.DeviceName || '',
         serialNumber: d.serialNumber || d.SerialNumber || '',
@@ -220,6 +246,8 @@ export function createSpireonClient(config: SpireonConfig): SpireonClient {
         } : null,
         raw: d,
       }))
+
+      return { content, total }
     },
 
     async getDevice(deviceId: string): Promise<SpireonDevice> {
