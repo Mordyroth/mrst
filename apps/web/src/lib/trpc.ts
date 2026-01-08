@@ -14,11 +14,7 @@ export const trpc: CreateTRPCReact<AppRouter, unknown, null> = createTRPCReact<A
 
 // Get API URL from environment or default
 const getBaseUrl = () => {
-  if (typeof window !== 'undefined') {
-    // Browser: use relative URL or configured URL
-    return process.env.NEXT_PUBLIC_API_URL || ''
-  }
-  // SSR: use absolute URL
+  // Use environment variable if set, otherwise default to localhost:3001
   return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 }
 

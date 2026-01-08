@@ -44,11 +44,48 @@ export interface Context {
 }
 
 // Create context from request
-export function createContext(opts: { req: Request; db: Database }): Context {
-  return {
-    db: opts.db,
-    // User will be populated by auth middleware
+export async function createContext(opts: { req: Request; db: Database }): Promise<Context> {
+  const ctx: Context = { db: opts.db }
+
+  // Extract auth token from Authorization header
+  const authHeader = opts.req.headers.get('authorization')
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7)
+
+    // Look up session by token
+    const sessionResult = await opts.db
+      .select()
+      .from(sessions)
+      .where(and(eq(sessions.token, token), gte(sessions.expiresAt, new Date())))
+      .limit(1)
+
+    const session = sessionResult[0]
+    if (session) {
+      // Look up user
+      const userResult = await opts.db
+        .select()
+        .from(users)
+        .where(eq(users.id, session.userId))
+        .limit(1)
+
+      const user = userResult[0]
+      if (user) {
+        ctx.user = {
+          id: user.id,
+          tenantId: user.tenantId,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+        }
+        ctx.session = {
+          id: session.id,
+          token: session.token,
+        }
+      }
+    }
   }
+
+  return ctx
 }
 
 // Initialize tRPC

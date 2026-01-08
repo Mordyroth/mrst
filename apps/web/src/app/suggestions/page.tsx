@@ -6,9 +6,23 @@
  * Full page view of AI suggestions with filtering and actions
  */
 
+import { useAuth, useRequireAuth } from '@/lib/auth'
 import { SuggestionsList } from '@/components/ai/Suggestions'
 
 export default function SuggestionsPage() {
+  const { isLoading } = useRequireAuth()
+  const { user, logout } = useAuth()
+
+  if (isLoading) {
+    return (
+      <main className="min-h-screen bg-background">
+        <div className="flex items-center justify-center h-screen">
+          <div className="text-lg text-muted-foreground">Loading...</div>
+        </div>
+      </main>
+    )
+  }
+
   return (
     <main className="min-h-screen bg-background">
       {/* Header */}
@@ -34,6 +48,15 @@ export default function SuggestionsPage() {
                   Suggestions
                 </a>
               </nav>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-muted-foreground">{user?.email}</span>
+              <button
+                onClick={logout}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Sign out
+              </button>
             </div>
           </div>
         </div>

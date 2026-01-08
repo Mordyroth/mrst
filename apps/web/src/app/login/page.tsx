@@ -1,28 +1,30 @@
 'use client'
 
 import { useState } from 'react'
+import { trpc } from '@/lib/trpc'
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [email, setEmail] = useState('admin@travelautorental.com')
+  const [password, setPassword] = useState('admin123')
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
+
+  const loginMutation = trpc.auth.login.useMutation({
+    onSuccess: (data) => {
+      // Store the token in localStorage
+      localStorage.setItem('auth_token', data.token)
+      localStorage.setItem('user', JSON.stringify(data.user))
+      // Redirect to dashboard
+      window.location.href = '/dashboard'
+    },
+    onError: (err) => {
+      setError(err.message || 'Invalid credentials')
+    },
+  })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    setLoading(true)
-
-    try {
-      // Will be connected to tRPC
-      console.log('Login attempt:', { email })
-      // Placeholder - redirect to dashboard on success
-      window.location.href = '/dashboard'
-    } catch (err) {
-      setError('Invalid credentials')
-    } finally {
-      setLoading(false)
-    }
+    loginMutation.mutate({ email, password })
   }
 
   return (
@@ -37,7 +39,7 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            <div className="rounded-md bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 p-3 text-sm text-red-800 dark:text-red-200">
               {error}
             </div>
           )}
@@ -73,11 +75,15 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loginMutation.isLoading}
             className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
-            {loading ? 'Signing in...' : 'Sign in'}
+            {loginMutation.isLoading ? 'Signing in...' : 'Sign in'}
           </button>
+
+          <p className="text-xs text-center text-muted-foreground mt-4">
+            Demo: admin@travelautorental.com / admin123
+          </p>
         </form>
       </div>
     </main>
