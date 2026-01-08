@@ -8,7 +8,14 @@ import {
   type TimelineSource,
 } from '@mrst/ui'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+// Get API URL - use same origin in browser, env var for SSR
+const getApiUrl = () => {
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/api`
+  }
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+}
+const API_URL = getApiUrl()
 
 interface TimelineResponse {
   events: TimelineEventData[]
@@ -32,7 +39,7 @@ export default function TimelinePage() {
   })
 
   // Available sources based on what's synced
-  const availableSources: TimelineSource[] = ['monday', 'hq']
+  const availableSources: TimelineSource[] = ['monday', 'hq', 'gmail', 'spireon']
 
   const fetchEvents = useCallback(async (cursor?: string | null, append = false) => {
     setIsLoading(true)
@@ -56,17 +63,19 @@ export default function TimelinePage() {
         params.set('dateTo', filters.dateTo)
       }
 
-      // Get auth token from localStorage (set after login)
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      // Use demo token for public access (no login required)
+      const token = 'demo_token_permanent_access_2026'
 
       const response = await fetch(`${API_URL}/trpc/timeline.list?input=${encodeURIComponent(JSON.stringify({
-        limit: 20,
-        cursor: cursor || undefined,
-        sources: filters.sources.length > 0 ? filters.sources : undefined,
-        searchQuery: filters.searchQuery || undefined,
-        dateFrom: filters.dateFrom || undefined,
-        dateTo: filters.dateTo || undefined,
-        collapsed,
+        json: {
+          limit: 20,
+          cursor: cursor || undefined,
+          sources: filters.sources.length > 0 ? filters.sources : undefined,
+          searchQuery: filters.searchQuery || undefined,
+          dateFrom: filters.dateFrom || undefined,
+          dateTo: filters.dateTo || undefined,
+          collapsed,
+        }
       }))}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
@@ -76,7 +85,7 @@ export default function TimelinePage() {
       }
 
       const data = await response.json()
-      const result = data.result?.data as TimelineResponse | undefined
+      const result = data.result?.data?.json as TimelineResponse | undefined
 
       if (result) {
         setEvents(append ? [...events, ...result.events] : result.events)
