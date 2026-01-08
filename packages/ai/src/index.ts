@@ -22,5 +22,11 @@ export { AIClient, createAIClient, getAIClient } from './client'
 // Pipeline
 export * from './pipeline'
 
+// Search
+export * from './search'
+
+// Suggestions
+export * from './suggestions'
+
 // Version
-export const AI_VERSION = '0.3.0'
+export const AI_VERSION = '0.5.0'
