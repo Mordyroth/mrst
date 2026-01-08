@@ -881,7 +881,103 @@ async function registerHandlers(boss: PgBoss, db: Database): Promise<void> {
 async function scheduleRecurringJobs(boss: PgBoss): Promise<void> {
   console.log('[Worker] Scheduling recurring jobs...')
 
-  // Note: These will be activated when integrations are configured
+  // Get active integration accounts to schedule their jobs
+  if (db) {
+    try {
+      // Find active Spireon integration accounts
+      const spireonAccounts = await db.select({
+        id: integrationAccounts.id,
+        tenantId: integrationAccounts.tenantId,
+      })
+        .from(integrationAccounts)
+        .where(
+          and(
+            eq(integrationAccounts.type, 'spireon'),
+            eq(integrationAccounts.isActive, true)
+          )
+        )
+
+      for (const account of spireonAccounts) {
+        // Create queue for Spireon poll job
+        const queueName = `spireon-poll-${account.id.slice(0, 8)}`
+        await boss.createQueue(queueName)
+
+        // Schedule location polling every 5 minutes
+        await boss.schedule(queueName, '*/5 * * * *', {
+          integrationAccountId: account.id,
+          tenantId: account.tenantId,
+        })
+
+        // Register worker for this queue
+        await boss.work(queueName, { batchSize: 1 }, async (jobs) => {
+          for (const job of jobs) {
+            console.log(`[Worker] Processing Spireon poll for account ${account.id}`)
+
+            const client = await getSpireonClient(db, account.id)
+            if (!client) {
+              console.error(`[Worker] Spireon client not available for account ${account.id}`)
+              return { status: 'error', error: 'Client not available' }
+            }
+
+            const schema = await import('@mrst/db/schema')
+            const { pollCurrentLocations, generateTimelineEvents } = await import('@mrst/integrations/spireon')
+
+            try {
+              // Poll current locations
+              const pollResult = await pollCurrentLocations({
+                db: db as any,
+                client,
+                integrationAccountId: account.id,
+                schema: {
+                  spireonDevices: schema.spireonDevices,
+                  spireonLocations: schema.spireonLocations,
+                  spireonGeofences: schema.spireonGeofences,
+                  spireonGeofenceEvents: schema.spireonGeofenceEvents,
+                },
+              })
+
+              // Generate timeline events from new locations
+              const timelineResult = await generateTimelineEvents({
+                db: db as any,
+                client,
+                integrationAccountId: account.id,
+                tenantId: account.tenantId,
+                schema: {
+                  spireonDevices: schema.spireonDevices,
+                  spireonLocations: schema.spireonLocations,
+                  spireonGeofences: schema.spireonGeofences,
+                  spireonGeofenceEvents: schema.spireonGeofenceEvents,
+                },
+                timelineConfig: {
+                  timelineEvents: schema.timelineEvents,
+                  timelineEventLinks: schema.timelineEventLinks,
+                  coreVehicles: schema.coreVehicles,
+                  tenants: schema.tenants,
+                },
+              })
+
+              console.log(`[Worker] Spireon poll complete:`, {
+                locationsCreated: pollResult.locationsCreated,
+                devicesUpdated: pollResult.devicesUpdated,
+                timelineEvents: timelineResult.eventsCreated,
+              })
+
+              return { status: 'success', ...pollResult, timelineEvents: timelineResult.eventsCreated }
+            } catch (error) {
+              console.error(`[Worker] Spireon poll failed:`, error)
+              return { status: 'error', error: (error as Error).message }
+            }
+          }
+        })
+
+        console.log(`[Worker] Scheduled Spireon location polling for account ${account.id} (every 5 minutes)`)
+      }
+    } catch (error) {
+      console.error('[Worker] Failed to schedule Spireon jobs:', error)
+    }
+  }
+
+  // Note: Other integrations will be activated when configured
   // Monday incremental sync - every 5 minutes
   // await boss.schedule(JOB_TYPES.SYNC_MONDAY_INCREMENTAL, '*/5 * * * *', {})
 
@@ -890,9 +986,6 @@ async function scheduleRecurringJobs(boss: PgBoss): Promise<void> {
 
   // Gmail sync - every minute
   // await boss.schedule(JOB_TYPES.SYNC_GMAIL, '* * * * *', {})
-
-  // Spireon sync - every 30 seconds (needs special handling)
-  // await boss.schedule(JOB_TYPES.SYNC_SPIREON, '*/1 * * * *', {})
 
   console.log('[Worker] Recurring jobs scheduled')
 }
