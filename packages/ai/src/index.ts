@@ -5,6 +5,7 @@
  * - Claude (primary chat/completion)
  * - Gemini (fallback + excellent image analysis)
  * - Voyage/Google embeddings for semantic search
+ * - Embedding pipeline for data processing
  */
 
 // Types
@@ -18,5 +19,8 @@ export { EmbeddingsService, createEmbeddingsService } from './embeddings'
 // Unified client
 export { AIClient, createAIClient, getAIClient } from './client'
 
+// Pipeline
+export * from './pipeline'
+
 // Version
-export const AI_VERSION = '0.2.0'
+export const AI_VERSION = '0.3.0'
