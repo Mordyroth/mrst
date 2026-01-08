@@ -3,22 +3,39 @@
 > This file is the source of truth for project state. Read this first every session.
 
 ## Current Status
-- **Phase:** 4 - Gmail Mirror (nearly complete)
-- **Task:** certifiedautocollision.com domain setup
-- **Progress:** 99%
-- **Blockers:** certifiedautocollision.com needs DWD setup in Google Admin Console
+- **Phase:** 5 - Spireon GPS (BLOCKED)
+- **Task:** OAuth authentication
+- **Progress:** 5%
+- **Blockers:** Spireon API credentials invalid/expired
+
+## Outstanding Issues
+1. **certifiedautocollision.com Gmail**: DWD not configured for service account
+   - Tested: claims@, office@, moishy@ - all return "unauthorized_client"
+   - Needs: Add service account to Admin Console > Security > API Controls > Domain-wide Delegation
+   - Client ID: `113685960413666521570`
+   - Scope: `https://www.googleapis.com/auth/gmail.readonly`
+
+2. **Spireon GPS API**: Authentication failing with 401
+   - Tested all OAuth2 grant types: password, client_credentials, with/without scope
+   - All return HTTP 401 with empty body
+   - Credentials from API_CREDENTIALS.md appear expired/invalid
+   - Need fresh credentials from Spireon/NSpire portal
 
 ## Last Session
 - **Date:** 2026-01-08
-- **Duration:** ~11 hours
-- **Completed:** Gmail timeline events created - 14,893 events (9,929 received, 4,964 sent)
-- **Stopped at:** S3 attachment download pending
+- **Duration:** ~12 hours
+- **Completed:**
+  - Gmail timeline events created (14,893 events)
+  - S3 attachments downloaded (6,591 files, 2.2 GiB)
+  - History-based incremental sync implemented
+  - Spireon client created (auth blocked)
+- **Stopped at:** Spireon credentials invalid
 
 ## Next Steps (Ordered)
-1. Download attachment files to S3
-2. Create history-based incremental sync
-3. Add certifiedautocollision.com domain (needs DWD setup)
-4. Move to Phase 5: Spireon GPS
+1. Get fresh Spireon credentials from NSpire portal
+2. Add certifiedautocollision.com domain (needs DWD setup)
+3. Complete Phase 5: Spireon GPS sync
+4. Move to Phase 6: WhatsApp
 
 ## Phase Checklist
 
@@ -67,7 +84,7 @@
 - [x] Collapse grouping for consecutive events (API + UI toggle)
 - [x] Mirroring validated (3,250 events linked to core_customers and core_vehicles)
 
-### Phase 4: Gmail Mirror
+### Phase 4: Gmail Mirror ✅ COMPLETE
 - [x] Gmail schema created (5 tables)
 - [x] Gmail client with service account auth
 - [x] Gmail sync service (labels, threads, messages, attachments)
@@ -81,7 +98,7 @@
 - [x] Attachments downloaded to S3 (6,591 files, 2.2 GiB)
 - [x] History-based incremental sync (uses Gmail History API)
 - [x] Gap handling (marks needsFullResync when historyId too old)
-- [ ] certifiedautocollision.com domain (needs DWD setup)
+- [ ] certifiedautocollision.com domain (blocked - needs DWD setup)
 
 ### Phase 5: Spireon GPS
 - [ ] OAuth token flow
@@ -337,40 +354,42 @@ Timeline Events Generated:
 - run-sync.ts (Full sync for known email addresses)
 - sync-messages.ts (Batch message sync)
 - download-attachments.ts (S3 attachment download script)
+- sync-incremental.ts (Incremental sync script using History API)
 - test-sync.ts (Test script with mailbox discovery)
 - test-direct.ts (Connection test)
+- test-cac-domain.ts (Test certifiedautocollision.com domain access)
+- index.ts (Module exports)
+
+## Files Created (Phase 5)
+
+### packages/integrations/src/spireon/
+- client.ts (OAuth2 client with token caching, ~380 lines)
+- test-client.ts (Test script for API validation)
 - index.ts (Module exports)
 
 ## Notes for Next Session
-Phase 4 Gmail Mirror is 95% complete.
+Phase 5 Spireon GPS is BLOCKED - credentials from API_CREDENTIALS.md are invalid/expired.
 
-**Gmail Sync Results (info@travelautorental.com):**
-- 9,039 threads
-- 14,893 messages
-- 14,893 timeline events (9,929 received, 4,964 sent)
-- 6,591 attachments recorded (pending S3 download)
-  - 4,491 PDFs (1.7 GB)
-  - 773 JPEGs (321 MB)
-  - 604 PNGs (35 MB)
+**What's Needed:**
+1. Fresh Spireon/NSpire credentials from the portal
+2. certifiedautocollision.com DWD setup in Google Admin Console
 
-**Remaining for Phase 4:**
-1. Configure AWS credentials on EC2 (needed for S3 upload)
-2. Run attachment download: `npx tsx packages/integrations/src/gmail/download-attachments.ts`
-3. Implement history-based incremental sync
-4. Set up certifiedautocollision.com domain (needs DWD in Google Admin)
-
-**Domain-Wide Delegation Notes:**
-- Service account: `travelauto-email-service@travelauto-email-integration.iam.gserviceaccount.com`
-- Working domain: travelautorental.com (admin: info@travelautorental.com)
-- Pending domain: certifiedautocollision.com (needs DWD setup with claims@)
-- Only `gmail.readonly` scope is authorized (not admin.directory)
+**Spireon Client Status:**
+- Client code created: `packages/integrations/src/spireon/client.ts`
+- Test script created: `packages/integrations/src/spireon/test-client.ts`
+- Auth tested with multiple grant types (password, client_credentials)
+- All return HTTP 401 with empty body - credentials are expired
 
 **Test Scripts:**
-- `npx tsx packages/integrations/src/gmail/run-sync.ts` - Full sync
-- `npx tsx packages/integrations/src/gmail/sync-messages.ts` - Message-only sync
-- `npx tsx packages/integrations/src/gmail/sync-incremental.ts` - Incremental sync (history-based)
+- `npx tsx packages/integrations/src/spireon/test-client.ts` - Test Spireon connection
+- `npx tsx packages/integrations/src/gmail/run-sync.ts` - Gmail full sync
+- `npx tsx packages/integrations/src/gmail/sync-incremental.ts` - Gmail incremental sync
 - `S3_REGION=us-east-2 S3_BUCKET=mrst-files npx tsx packages/integrations/src/gmail/download-attachments.ts` - S3 download
-- `npx tsx packages/integrations/src/gmail/test-direct.ts` - Test connection
+- `npx tsx packages/integrations/src/gmail/test-cac-domain.ts` - Test CAC domain access
+
+**AWS Config:**
+- S3 Bucket: `mrst-files` in us-east-2
+- Credentials configured in `~/.aws/credentials`
 
 TypeScript strictness: Some TS errors in Monday.com sync code due to noUncheckedIndexedAccess.
 Gmail code uses proper null checks and type assertions.
