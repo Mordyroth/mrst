@@ -6,7 +6,7 @@
 import { initTRPC, TRPCError } from '@trpc/server'
 import { z } from 'zod'
 import superjson from 'superjson'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, desc, inArray, gte, lte, sql, or, ilike } from 'drizzle-orm'
 import crypto from 'crypto'
 import type { Database } from '@mrst/db'
 import {
@@ -15,7 +15,12 @@ import {
   sessions,
   integrationAccounts,
   syncRuns,
+  timelineEvents,
+  timelineEventLinks,
+  coreCustomers,
+  coreVehicles,
   type UserRole,
+  type TimelineEventType,
 } from '@mrst/db/schema'
 
 // Context type
@@ -417,6 +422,366 @@ const usersRouter = t.router({
     }),
 })
 
+// Timeline router
+const timelineRouter = t.router({
+  /**
+   * Get timeline events with filtering
+   */
+  list: protectedProcedure
+    .input(z.object({
+      // Pagination
+      limit: z.number().min(1).max(100).default(50),
+      cursor: z.string().uuid().optional(),
+      // Filters
+      sources: z.array(z.string()).optional(),
+      eventTypes: z.array(z.string()).optional(),
+      entityType: z.string().optional(),
+      entityId: z.string().uuid().optional(),
+      search: z.string().optional(),
+      dateFrom: z.string().datetime().optional(),
+      dateTo: z.string().datetime().optional(),
+      // Options
+      includeInternal: z.boolean().default(false),
+    }))
+    .query(async ({ ctx, input }) => {
+      const { limit, cursor, sources, eventTypes, entityType, entityId, search, dateFrom, dateTo, includeInternal } = input
+
+      // Build conditions
+      const conditions = [eq(timelineEvents.tenantId, ctx.user!.tenantId)]
+
+      if (!includeInternal) {
+        conditions.push(eq(timelineEvents.isInternal, false))
+      }
+
+      if (sources && sources.length > 0) {
+        conditions.push(inArray(timelineEvents.source, sources))
+      }
+
+      if (eventTypes && eventTypes.length > 0) {
+        conditions.push(inArray(timelineEvents.eventType, eventTypes as TimelineEventType[]))
+      }
+
+      if (dateFrom) {
+        conditions.push(gte(timelineEvents.occurredAt, new Date(dateFrom)))
+      }
+
+      if (dateTo) {
+        conditions.push(lte(timelineEvents.occurredAt, new Date(dateTo)))
+      }
+
+      if (search) {
+        conditions.push(
+          or(
+            ilike(timelineEvents.title, `%${search}%`),
+            ilike(timelineEvents.summary, `%${search}%`),
+            ilike(timelineEvents.content, `%${search}%`)
+          ) ?? sql`false`
+        )
+      }
+
+      if (cursor) {
+        const cursorEvent = await ctx.db
+          .select({ occurredAt: timelineEvents.occurredAt })
+          .from(timelineEvents)
+          .where(eq(timelineEvents.id, cursor))
+          .limit(1)
+        if (cursorEvent[0]) {
+          conditions.push(lte(timelineEvents.occurredAt, cursorEvent[0].occurredAt))
+        }
+      }
+
+      // If filtering by entity, join with links
+      let query
+      if (entityType && entityId) {
+        query = ctx.db
+          .select({
+            id: timelineEvents.id,
+            eventType: timelineEvents.eventType,
+            source: timelineEvents.source,
+            title: timelineEvents.title,
+            summary: timelineEvents.summary,
+            content: timelineEvents.content,
+            contentHtml: timelineEvents.contentHtml,
+            metadata: timelineEvents.metadata,
+            actorType: timelineEvents.actorType,
+            actorName: timelineEvents.actorName,
+            actorEmail: timelineEvents.actorEmail,
+            occurredAt: timelineEvents.occurredAt,
+            isInternal: timelineEvents.isInternal,
+            isPinned: timelineEvents.isPinned,
+          })
+          .from(timelineEvents)
+          .innerJoin(
+            timelineEventLinks,
+            eq(timelineEventLinks.timelineEventId, timelineEvents.id)
+          )
+          .where(
+            and(
+              ...conditions,
+              eq(timelineEventLinks.entityType, entityType),
+              eq(timelineEventLinks.entityId, entityId)
+            )
+          )
+          .orderBy(desc(timelineEvents.occurredAt), desc(timelineEvents.id))
+          .limit(limit + 1)
+      } else {
+        query = ctx.db
+          .select({
+            id: timelineEvents.id,
+            eventType: timelineEvents.eventType,
+            source: timelineEvents.source,
+            title: timelineEvents.title,
+            summary: timelineEvents.summary,
+            content: timelineEvents.content,
+            contentHtml: timelineEvents.contentHtml,
+            metadata: timelineEvents.metadata,
+            actorType: timelineEvents.actorType,
+            actorName: timelineEvents.actorName,
+            actorEmail: timelineEvents.actorEmail,
+            occurredAt: timelineEvents.occurredAt,
+            isInternal: timelineEvents.isInternal,
+            isPinned: timelineEvents.isPinned,
+          })
+          .from(timelineEvents)
+          .where(and(...conditions))
+          .orderBy(desc(timelineEvents.occurredAt), desc(timelineEvents.id))
+          .limit(limit + 1)
+      }
+
+      const events = await query
+
+      // Determine if there are more results
+      let nextCursor: string | undefined
+      if (events.length > limit) {
+        const lastEvent = events.pop()
+        nextCursor = lastEvent?.id
+      }
+
+      return {
+        events,
+        nextCursor,
+      }
+    }),
+
+  /**
+   * Get a single timeline event by ID
+   */
+  get: protectedProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const event = await ctx.db
+        .select()
+        .from(timelineEvents)
+        .where(
+          and(
+            eq(timelineEvents.id, input.id),
+            eq(timelineEvents.tenantId, ctx.user!.tenantId)
+          )
+        )
+        .limit(1)
+
+      if (!event[0]) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Event not found' })
+      }
+
+      // Get linked entities
+      const links = await ctx.db
+        .select({
+          entityType: timelineEventLinks.entityType,
+          entityId: timelineEventLinks.entityId,
+          linkType: timelineEventLinks.linkType,
+        })
+        .from(timelineEventLinks)
+        .where(eq(timelineEventLinks.timelineEventId, input.id))
+
+      return {
+        ...event[0],
+        links,
+      }
+    }),
+
+  /**
+   * Get timeline for a customer
+   */
+  forCustomer: protectedProcedure
+    .input(z.object({
+      customerId: z.string().uuid(),
+      limit: z.number().min(1).max(100).default(50),
+      cursor: z.string().uuid().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      // Get events linked to this customer
+      const conditions = [
+        eq(timelineEvents.tenantId, ctx.user!.tenantId),
+        eq(timelineEventLinks.entityType, 'customer'),
+        eq(timelineEventLinks.entityId, input.customerId),
+      ]
+
+      if (input.cursor) {
+        const cursorEvent = await ctx.db
+          .select({ occurredAt: timelineEvents.occurredAt })
+          .from(timelineEvents)
+          .where(eq(timelineEvents.id, input.cursor))
+          .limit(1)
+        if (cursorEvent[0]) {
+          conditions.push(lte(timelineEvents.occurredAt, cursorEvent[0].occurredAt))
+        }
+      }
+
+      const events = await ctx.db
+        .select({
+          id: timelineEvents.id,
+          eventType: timelineEvents.eventType,
+          source: timelineEvents.source,
+          title: timelineEvents.title,
+          summary: timelineEvents.summary,
+          actorName: timelineEvents.actorName,
+          occurredAt: timelineEvents.occurredAt,
+          isPinned: timelineEvents.isPinned,
+        })
+        .from(timelineEvents)
+        .innerJoin(
+          timelineEventLinks,
+          eq(timelineEventLinks.timelineEventId, timelineEvents.id)
+        )
+        .where(and(...conditions))
+        .orderBy(desc(timelineEvents.occurredAt))
+        .limit(input.limit + 1)
+
+      let nextCursor: string | undefined
+      if (events.length > input.limit) {
+        const lastEvent = events.pop()
+        nextCursor = lastEvent?.id
+      }
+
+      // Get customer info
+      const customer = await ctx.db
+        .select({
+          displayName: coreCustomers.displayName,
+          primaryEmail: coreCustomers.primaryEmail,
+          primaryPhone: coreCustomers.primaryPhone,
+        })
+        .from(coreCustomers)
+        .where(eq(coreCustomers.id, input.customerId))
+        .limit(1)
+
+      return {
+        customer: customer[0] ?? null,
+        events,
+        nextCursor,
+      }
+    }),
+
+  /**
+   * Get timeline for a vehicle
+   */
+  forVehicle: protectedProcedure
+    .input(z.object({
+      vehicleId: z.string().uuid(),
+      limit: z.number().min(1).max(100).default(50),
+      cursor: z.string().uuid().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const conditions = [
+        eq(timelineEvents.tenantId, ctx.user!.tenantId),
+        eq(timelineEventLinks.entityType, 'vehicle'),
+        eq(timelineEventLinks.entityId, input.vehicleId),
+      ]
+
+      if (input.cursor) {
+        const cursorEvent = await ctx.db
+          .select({ occurredAt: timelineEvents.occurredAt })
+          .from(timelineEvents)
+          .where(eq(timelineEvents.id, input.cursor))
+          .limit(1)
+        if (cursorEvent[0]) {
+          conditions.push(lte(timelineEvents.occurredAt, cursorEvent[0].occurredAt))
+        }
+      }
+
+      const events = await ctx.db
+        .select({
+          id: timelineEvents.id,
+          eventType: timelineEvents.eventType,
+          source: timelineEvents.source,
+          title: timelineEvents.title,
+          summary: timelineEvents.summary,
+          actorName: timelineEvents.actorName,
+          occurredAt: timelineEvents.occurredAt,
+          isPinned: timelineEvents.isPinned,
+        })
+        .from(timelineEvents)
+        .innerJoin(
+          timelineEventLinks,
+          eq(timelineEventLinks.timelineEventId, timelineEvents.id)
+        )
+        .where(and(...conditions))
+        .orderBy(desc(timelineEvents.occurredAt))
+        .limit(input.limit + 1)
+
+      let nextCursor: string | undefined
+      if (events.length > input.limit) {
+        const lastEvent = events.pop()
+        nextCursor = lastEvent?.id
+      }
+
+      // Get vehicle info
+      const vehicle = await ctx.db
+        .select({
+          make: coreVehicles.make,
+          model: coreVehicles.model,
+          year: coreVehicles.year,
+          licensePlate: coreVehicles.licensePlate,
+        })
+        .from(coreVehicles)
+        .where(eq(coreVehicles.id, input.vehicleId))
+        .limit(1)
+
+      return {
+        vehicle: vehicle[0] ?? null,
+        events,
+        nextCursor,
+      }
+    }),
+
+  /**
+   * Get timeline statistics
+   */
+  stats: protectedProcedure
+    .query(async ({ ctx }) => {
+      const eventsBySource = await ctx.db
+        .select({
+          source: timelineEvents.source,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(timelineEvents)
+        .where(eq(timelineEvents.tenantId, ctx.user!.tenantId))
+        .groupBy(timelineEvents.source)
+
+      const eventsByType = await ctx.db
+        .select({
+          eventType: timelineEvents.eventType,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(timelineEvents)
+        .where(eq(timelineEvents.tenantId, ctx.user!.tenantId))
+        .groupBy(timelineEvents.eventType)
+
+      const total = await ctx.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(timelineEvents)
+        .where(eq(timelineEvents.tenantId, ctx.user!.tenantId))
+
+      return {
+        total: total[0]?.count ?? 0,
+        bySource: eventsBySource,
+        byType: eventsByType,
+      }
+    }),
+})
+
 // Main router
 export const appRouter = t.router({
   auth: authRouter,
@@ -424,6 +789,7 @@ export const appRouter = t.router({
   integrations: integrationsRouter,
   sync: syncRouter,
   users: usersRouter,
+  timeline: timelineRouter,
 })
 
 export type AppRouter = typeof appRouter

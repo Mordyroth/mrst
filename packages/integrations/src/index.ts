@@ -7,3 +7,6 @@ export * from './hq/index'
 export * from './gmail/index'
 export * from './spireon/index'
 export * from './whatsapp/index'
+
+// Timeline service (namespaced to avoid conflicts)
+export * as timeline from './timeline/index'

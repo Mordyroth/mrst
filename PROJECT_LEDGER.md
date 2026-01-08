@@ -3,23 +3,22 @@
 > This file is the source of truth for project state. Read this first every session.
 
 ## Current Status
-- **Phase:** 2 - HQ Rental Mirror
-- **Task:** Phase 2 COMPLETE
-- **Progress:** 100%
+- **Phase:** 3 - Timeline v1
+- **Task:** Collapse grouping
+- **Progress:** 95%
 - **Blockers:** None
 
 ## Last Session
 - **Date:** 2026-01-08
-- **Duration:** ~5 hours
-- **Completed:** HQ REST client, sync service, worker jobs, full data sync, core table population
-- **Stopped at:** Phase 2 complete, ready for Phase 3
+- **Duration:** ~6 hours
+- **Completed:** Phase 2 complete, Timeline generation, Timeline API
+- **Stopped at:** Timeline UI component remaining
 
 ## Next Steps (Ordered)
-1. Begin Phase 3: Timeline v1
-2. Create timeline_events from Monday updates
-3. Create timeline_events from HQ reservations
-4. Create timeline API endpoint
-5. Create timeline UI component
+1. Create Timeline UI component
+2. Test timeline queries with real data
+3. Add collapse grouping for consecutive events
+4. Begin Phase 4: Gmail Mirror
 
 ## Phase Checklist
 
@@ -59,13 +58,13 @@
 - [x] core_vehicles populated (242 created, 1 linked)
 - [x] external_links created (2,383 customer links, 243 vehicle links)
 
-### Phase 3: Timeline v1
-- [ ] timeline_events from Monday
-- [ ] timeline_events from HQ
-- [ ] Collapse grouping working
-- [ ] timeline_event_links created
-- [ ] Timeline API endpoint
-- [ ] Timeline UI component
+### Phase 3: Timeline v1 ⏳ IN PROGRESS (95%)
+- [x] timeline_events from Monday (512 activity events, 215 value changes)
+- [x] timeline_events from HQ (3,250 reservation events)
+- [x] timeline_event_links created (16,762 links)
+- [x] Timeline API endpoint (list, get, forCustomer, forVehicle, stats)
+- [x] Timeline UI component (Timeline, TimelineEvent, TimelineFilters, TimelineCompact)
+- [ ] Collapse grouping for consecutive events
 - [ ] Mirroring validated via timeline
 
 ### Phase 4: Gmail Mirror
@@ -108,8 +107,8 @@
 ## Integration Status
 | Integration | Client | Schema | Sync Job | Tested | Timeline |
 |-------------|--------|--------|----------|--------|----------|
-| Monday.com  | ✅ | ✅ | ✅ | ✅ | ❌ |
-| HQ Rental   | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Monday.com  | ✅ | ✅ | ✅ | ✅ | ✅ |
+| HQ Rental   | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Gmail       | ❌ | ✅ | ❌ | ❌ | ❌ |
 | Spireon     | ❌ | ✅ | ❌ | ❌ | ❌ |
 | WhatsApp    | ❌ | ✅ | ❌ | ❌ | ❌ |
@@ -263,8 +262,43 @@ HQ API Notes:
 - One HQ API 500 error on reservation #774 (server-side bug)
 ```
 
+## Files Created (Phase 3)
+
+### packages/integrations/src/timeline/
+- generate.ts (Timeline event generation from Monday/HQ sources)
+- index.ts (Module exports)
+- test-generate.ts (Test script for timeline generation)
+
+### packages/ui/src/timeline/
+- index.ts (Module exports)
+- types.ts (Timeline types, source labels/colors)
+- Timeline.tsx (Main timeline container + TimelineCompact)
+- TimelineEvent.tsx (Single event display component)
+- TimelineFilters.tsx (Filter controls component)
+
+### apps/web/src/app/timeline/
+- page.tsx (Timeline page with API integration)
+
+### apps/api/src/trpc/
+- router.ts (Updated with timeline router: list, get, forCustomer, forVehicle, stats)
+
+## Test Results (Phase 3)
+```
+Timeline Events Generated:
+  Monday activity:    512
+  Monday value changes: 215
+  HQ reservations:    3,250
+  Total events:       3,762
+  Event links:        16,762
+```
+
 ## Notes for Next Session
-Phase 2 HQ Rental Mirror is COMPLETE. Ready for Phase 3: Timeline v1
+Phase 3 Timeline v1 is 95% complete.
+- Timeline generation service complete
+- Timeline API endpoints complete
+- Timeline UI components complete (Timeline, TimelineEvent, TimelineFilters, TimelineCompact)
+- Timeline page created at /timeline
+- Remaining: collapse grouping, validation testing
 
 Core table summary:
 - 2,285 core_customers (from 2,383 HQ customers - 98 merged)
