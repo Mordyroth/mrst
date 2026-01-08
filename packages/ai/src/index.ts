@@ -1,6 +1,22 @@
 /**
  * @mrst/ai - AI services (Claude, Gemini, embeddings)
+ *
+ * Provides unified AI client with:
+ * - Claude (primary chat/completion)
+ * - Gemini (fallback + excellent image analysis)
+ * - Voyage/Google embeddings for semantic search
  */
 
-// Placeholder - will be implemented in Phase 7
-export const AI_VERSION = '0.1.0'
+// Types
+export * from './types'
+
+// Clients
+export { ClaudeClient, createClaudeClient } from './claude'
+export { GeminiClient, createGeminiClient } from './gemini'
+export { EmbeddingsService, createEmbeddingsService } from './embeddings'
+
+// Unified client
+export { AIClient, createAIClient, getAIClient } from './client'
+
+// Version
+export const AI_VERSION = '0.2.0'

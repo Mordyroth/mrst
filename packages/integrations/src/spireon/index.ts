@@ -1,7 +1,14 @@
 /**
- * Spireon GPS integration client
- * OAuth + REST API
+ * Spireon GPS integration
+ *
+ * Provides:
+ * - API client with Basic Auth + X-Nspire-AppToken
+ * - Device/asset sync
+ * - Location history
+ * - Geofence management
  */
 
-// Will be implemented in Phase 5
-export const SPIREON_CLIENT_VERSION = '0.1.0'
+export * from './client'
+export * from './sync'
+
+export const SPIREON_CLIENT_VERSION = '0.2.0'

@@ -3,22 +3,22 @@
 > This file is the source of truth for project state. Read this first every session.
 
 ## Current Status
-- **Phase:** 5 - Spireon GPS (in progress)
-- **Task:** Sync devices and locations
-- **Progress:** 30%
-- **Blockers:** None - auth fixed!
+- **Phase:** 7 - AI Intelligence Layer (in progress)
+- **Task:** AI client and embeddings created, ready for embedding pipeline
+- **Progress:** 60%
+- **Blockers:** None
 
 ## Outstanding Issues
-1. **certifiedautocollision.com Gmail**: DWD not configured for service account
-   - Tested: claims@, office@, moishy@ - all return "unauthorized_client"
-   - Needs: Add service account to Admin Console > Security > API Controls > Domain-wide Delegation
-   - Client ID: `113685960413666521570`
-   - Scope: `https://www.googleapis.com/auth/gmail.readonly`
+1. **certifiedautocollision.com Gmail**: Needs SEPARATE service account
+   - The old code used TWO service account files - one per domain
+   - travelautorental.com: Client ID `113685960413666521570`, scope `gmail.readonly`
+   - certifiedautocollision.com: Client ID `113779064017479202218`, scope `https://mail.google.com/`
+   - Need to provide `certified-service-account.json` (not in git repo, was on production server)
 
-2. **Spireon GPS API**: ✅ FIXED
-   - Issue: Was using OAuth2 password grant (wrong)
-   - Fix: Use Basic Auth + X-Nspire-AppToken header + /assets endpoint
-   - Now working: 247 assets found
+2. **Spireon GPS API**: ✅ COMPLETE
+   - Auth fixed: Basic Auth + X-Nspire-AppToken header
+   - 247 devices synced to database
+   - Geofence API returned 404 (no geofences configured)
 
 ## Last Session
 - **Date:** 2026-01-08
@@ -99,15 +99,15 @@
 - [x] Gap handling (marks needsFullResync when historyId too old)
 - [ ] certifiedautocollision.com domain (blocked - needs DWD setup)
 
-### Phase 5: Spireon GPS
+### Phase 5: Spireon GPS ✅ COMPLETE
 - [x] Basic Auth + X-Nspire-AppToken auth (247 assets found)
-- [ ] Devices synced to database
-- [ ] Location polling working
-- [ ] GPS history backfill
-- [ ] Diagnostics synced
-- [ ] Geofence created (shop location)
-- [ ] "At shop" detection working
-- [ ] Timeline events created
+- [x] Devices synced to database (247 devices)
+- [ ] Location polling working (pending)
+- [ ] GPS history backfill (pending)
+- [ ] Diagnostics synced (pending)
+- [ ] Geofence created (shop location) - API returned 404
+- [ ] "At shop" detection working (pending)
+- [ ] Timeline events created (pending)
 
 ### Phase 6: WhatsApp
 - [ ] 360Dialog client
@@ -117,11 +117,14 @@
 - [ ] Contacts linked to customers
 - [ ] Timeline events created
 
-### Phase 7: AI Intelligence Layer
-- [ ] pgvector extension added
+### Phase 7: AI Intelligence Layer (in progress)
+- [x] pgvector extension added (v0.8.0)
+- [x] AI schema created (embeddings, conversations, messages, tasks, queue)
+- [x] HNSW vector index created
+- [x] Claude client with Gemini fallback (@mrst/ai package)
+- [x] Voyage/Google embeddings service
 - [ ] Embedding pipeline built
 - [ ] All data types embedded
-- [ ] Claude client with Gemini fallback
 - [ ] Natural language query engine
 - [ ] "What should I do next?" endpoint
 - [ ] Vehicle image generation
@@ -160,7 +163,7 @@
 | Monday.com  | ✅ | ✅ | ✅ | ✅ | ✅ |
 | HQ Rental   | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Gmail       | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Spireon     | ✅ | ✅ | ❌ | ✅ | ❌ |
+| Spireon     | ✅ | ✅ | ✅ | ✅ | ⏳ |
 | WhatsApp    | ❌ | ✅ | ❌ | ❌ | ❌ |
 
 ⏳ = Timeline events pending
@@ -362,30 +365,48 @@ Timeline Events Generated:
 ## Files Created (Phase 5)
 
 ### packages/integrations/src/spireon/
-- client.ts (OAuth2 client with token caching, ~380 lines)
+- client.ts (Basic Auth + X-Nspire-AppToken client, ~400 lines)
+- sync.ts (Sync service for devices and geofences, ~300 lines)
+- run-sync.ts (Test script to run full sync)
 - test-client.ts (Test script for API validation)
 - index.ts (Module exports)
 
+## Files Created (Phase 7)
+
+### packages/db/src/schema/
+- ai.ts (AI schema: embeddings, conversations, messages, tasks, queue - 195 lines)
+
+### packages/ai/src/
+- types.ts (AI type definitions)
+- claude.ts (Anthropic Claude client with retry logic)
+- gemini.ts (Google Gemini client for fallback + vision)
+- embeddings.ts (Voyage/Google embeddings service)
+- client.ts (Unified AI client with Claude primary, Gemini fallback)
+- index.ts (Module exports)
+
 ## Notes for Next Session
-Phase 5 Spireon GPS auth is working! 247 assets found.
+Phase 7 AI Intelligence Layer in progress.
 
-**Spireon Auth Fix:**
-- Problem: Was using OAuth2 password grant (wrong approach)
-- Solution: Use Basic Auth + X-Nspire-AppToken header + /assets endpoint
-- This matches the archive implementation in `api/spireon_proxy.php`
+**Completed this session:**
+- pgvector 0.8.0 installed and working
+- AI schema created with 5 tables (embeddings, ai_conversations, ai_messages, ai_tasks, embedding_queue)
+- HNSW vector index created for similarity search
+- @mrst/ai package created with Claude + Gemini clients
+- Embeddings service with Voyage/Google support
+- Spireon devices synced to database (247 devices)
 
-**Next Steps for Spireon:**
-1. Create sync service to save assets to database
-2. Implement location polling (every 30-60 seconds)
-3. Create geofence for shop location
-4. Implement "at shop" detection
-5. Generate timeline events
+**Next Steps:**
+1. Build embedding pipeline to process existing data
+2. Create embedding worker job
+3. Implement natural language query API
+4. Build "What should I do next?" feature
 
 **Outstanding:**
-- certifiedautocollision.com Gmail: Needs DWD setup in Google Admin Console
+- certifiedautocollision.com Gmail: Needs second service account file (Client ID `113779064017479202218`)
 
 **Test Scripts:**
 - `npx tsx packages/integrations/src/spireon/test-client.ts` - Test Spireon connection
+- `npx tsx packages/integrations/src/spireon/run-sync.ts` - Sync Spireon devices to DB
 - `npx tsx packages/integrations/src/gmail/run-sync.ts` - Gmail full sync
 - `npx tsx packages/integrations/src/gmail/sync-incremental.ts` - Gmail incremental sync
 - `S3_REGION=us-east-2 S3_BUCKET=mrst-files npx tsx packages/integrations/src/gmail/download-attachments.ts` - S3 download
