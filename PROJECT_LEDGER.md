@@ -4,8 +4,8 @@
 
 ## Current Status
 - **Phase:** 3 - Timeline v1
-- **Task:** Collapse grouping
-- **Progress:** 95%
+- **Task:** Mirroring validation
+- **Progress:** 98%
 - **Blockers:** None
 
 ## Last Session
@@ -58,13 +58,13 @@
 - [x] core_vehicles populated (242 created, 1 linked)
 - [x] external_links created (2,383 customer links, 243 vehicle links)
 
-### Phase 3: Timeline v1 ⏳ IN PROGRESS (95%)
+### Phase 3: Timeline v1 ⏳ IN PROGRESS (98%)
 - [x] timeline_events from Monday (512 activity events, 215 value changes)
 - [x] timeline_events from HQ (3,250 reservation events)
 - [x] timeline_event_links created (16,762 links)
-- [x] Timeline API endpoint (list, get, forCustomer, forVehicle, stats)
+- [x] Timeline API endpoint (list, get, forCustomer, forVehicle, stats, expandGroup)
 - [x] Timeline UI component (Timeline, TimelineEvent, TimelineFilters, TimelineCompact)
-- [ ] Collapse grouping for consecutive events
+- [x] Collapse grouping for consecutive events (API + UI toggle)
 - [ ] Mirroring validated via timeline
 
 ### Phase 4: Gmail Mirror

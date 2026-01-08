@@ -22,6 +22,7 @@ export default function TimelinePage() {
   const [hasMore, setHasMore] = useState(false)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [collapsed, setCollapsed] = useState(false)
   const [filters, setFilters] = useState<TimelineFiltersState>({
     sources: [],
     eventTypes: [],
@@ -65,6 +66,7 @@ export default function TimelinePage() {
         searchQuery: filters.searchQuery || undefined,
         dateFrom: filters.dateFrom || undefined,
         dateTo: filters.dateTo || undefined,
+        collapsed,
       }))}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
@@ -87,7 +89,7 @@ export default function TimelinePage() {
     } finally {
       setIsLoading(false)
     }
-  }, [filters, events])
+  }, [filters, events, collapsed])
 
   // Initial load
   useEffect(() => {
@@ -95,14 +97,14 @@ export default function TimelinePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Refetch when filters change
+  // Refetch when filters or collapsed change
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchEvents()
     }, 300) // Debounce
     return () => clearTimeout(timer)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters])
+  }, [filters, collapsed])
 
   const handleLoadMore = () => {
     if (nextCursor && !isLoading) {
@@ -113,6 +115,19 @@ export default function TimelinePage() {
   const handleEventClick = (event: TimelineEventData) => {
     console.log('Event clicked:', event)
     // TODO: Open event detail modal or navigate to entity
+  }
+
+  const handleExpandClick = async (event: TimelineEventData) => {
+    if (!event.collapseGroupKey) return
+
+    // When expand is clicked, disable collapsed mode to show all events
+    setCollapsed(false)
+    // TODO: Could also fetch just this group and show in a modal
+    console.log('Expand group:', event.collapseGroupKey)
+  }
+
+  const handleCollapsedChange = (newCollapsed: boolean) => {
+    setCollapsed(newCollapsed)
   }
 
   return (
@@ -172,6 +187,9 @@ export default function TimelinePage() {
           hasMore={hasMore}
           onLoadMore={handleLoadMore}
           onEventClick={handleEventClick}
+          onExpandClick={handleExpandClick}
+          collapsed={collapsed}
+          onCollapsedChange={handleCollapsedChange}
           emptyMessage={
             filters.sources.length > 0 || filters.searchQuery
               ? 'No events match your filters'

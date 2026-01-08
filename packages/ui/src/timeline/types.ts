@@ -49,6 +49,10 @@ export interface TimelineEventData {
   isInternal: boolean
   metadata: Record<string, unknown> | null
   links?: TimelineEventLink[]
+  // Collapse fields (optional)
+  collapseGroupKey?: string | null
+  collapsedCount?: number
+  collapsedIds?: string[]
 }
 
 export interface TimelineEventLink {

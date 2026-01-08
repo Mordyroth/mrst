@@ -17,9 +17,12 @@ export interface TimelineProps {
   hasMore?: boolean
   onLoadMore?: () => void
   onEventClick?: (event: TimelineEventData) => void
+  onExpandClick?: (event: TimelineEventData) => void
   showFilters?: boolean
   emptyMessage?: string
   className?: string
+  collapsed?: boolean
+  onCollapsedChange?: (collapsed: boolean) => void
 }
 
 export function Timeline({
@@ -31,9 +34,12 @@ export function Timeline({
   hasMore = false,
   onLoadMore,
   onEventClick,
+  onExpandClick,
   showFilters = true,
   emptyMessage = 'No events found',
   className,
+  collapsed = false,
+  onCollapsedChange,
 }: TimelineProps) {
   return (
     <div className={cn('flex flex-col lg:flex-row gap-6', className)}>
@@ -47,6 +53,21 @@ export function Timeline({
               onFiltersChange={onFiltersChange}
               availableSources={availableSources}
             />
+
+            {/* Collapse toggle */}
+            {onCollapsedChange && (
+              <div className="mt-4 pt-4 border-t">
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={collapsed}
+                    onChange={(e) => onCollapsedChange(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  <span>Group similar events</span>
+                </label>
+              </div>
+            )}
           </div>
         </aside>
       )}
@@ -67,6 +88,7 @@ export function Timeline({
                 isFirst={index === 0}
                 isLast={index === events.length - 1 && !hasMore}
                 onEventClick={onEventClick}
+                onExpandClick={onExpandClick}
               />
             ))}
           </div>

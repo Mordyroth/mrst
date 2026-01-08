@@ -16,6 +16,7 @@ export interface TimelineEventProps {
   isFirst?: boolean
   isLast?: boolean
   onEventClick?: (event: TimelineEventData) => void
+  onExpandClick?: (event: TimelineEventData) => void
 }
 
 /**
@@ -75,10 +76,11 @@ function getSourceIcon(source: string): string {
   }
 }
 
-export function TimelineEvent({ event, isFirst, isLast, onEventClick }: TimelineEventProps) {
+export function TimelineEvent({ event, isFirst, isLast, onEventClick, onExpandClick }: TimelineEventProps) {
   const sourceColor = SOURCE_COLORS[event.source] || SOURCE_COLORS.system
   const sourceLabel = SOURCE_LABELS[event.source] || event.source
   const eventTypeLabel = EVENT_TYPE_LABELS[event.eventType] || event.eventType
+  const isCollapsed = (event.collapsedCount ?? 1) > 1
 
   return (
     <div
@@ -175,6 +177,21 @@ export function TimelineEvent({ event, isFirst, isLast, onEventClick }: Timeline
                 {link.entityType}
               </span>
             ))}
+          </div>
+        )}
+
+        {/* Collapsed indicator */}
+        {isCollapsed && (
+          <div className="mt-2 pt-2 border-t">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onExpandClick?.(event)
+              }}
+              className="text-xs text-primary hover:underline"
+            >
+              +{event.collapsedCount! - 1} more similar events
+            </button>
           </div>
         )}
       </div>

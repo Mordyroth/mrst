@@ -422,6 +422,63 @@ const usersRouter = t.router({
     }),
 })
 
+// Helper function to collapse timeline events by group key
+interface TimelineEventRow {
+  id: string
+  eventType: string
+  source: string
+  title: string | null
+  summary: string | null
+  content?: string | null
+  contentHtml?: string | null
+  metadata?: unknown
+  actorType?: string | null
+  actorName: string | null
+  actorEmail?: string | null
+  occurredAt: Date
+  isInternal?: boolean | null
+  isPinned: boolean
+  collapseGroupKey?: string | null
+}
+
+interface CollapsedEvent extends TimelineEventRow {
+  collapsedCount: number
+  collapsedIds: string[]
+}
+
+function collapseTimelineEvents(events: TimelineEventRow[]): CollapsedEvent[] {
+  const result: CollapsedEvent[] = []
+  let currentGroup: CollapsedEvent | null = null
+
+  for (const event of events) {
+    const groupKey = (event as { collapseGroupKey?: string | null }).collapseGroupKey
+
+    // If no group key or different group, start a new group
+    if (!groupKey || !currentGroup || currentGroup.collapseGroupKey !== groupKey) {
+      if (currentGroup) {
+        result.push(currentGroup)
+      }
+      currentGroup = {
+        ...event,
+        collapseGroupKey: groupKey,
+        collapsedCount: 1,
+        collapsedIds: [event.id],
+      }
+    } else {
+      // Same group, increment count and add ID
+      currentGroup.collapsedCount++
+      currentGroup.collapsedIds.push(event.id)
+    }
+  }
+
+  // Don't forget the last group
+  if (currentGroup) {
+    result.push(currentGroup)
+  }
+
+  return result
+}
+
 // Timeline router
 const timelineRouter = t.router({
   /**
@@ -442,9 +499,10 @@ const timelineRouter = t.router({
       dateTo: z.string().datetime().optional(),
       // Options
       includeInternal: z.boolean().default(false),
+      collapsed: z.boolean().default(false), // Group by collapseGroupKey
     }))
     .query(async ({ ctx, input }) => {
-      const { limit, cursor, sources, eventTypes, entityType, entityId, search, dateFrom, dateTo, includeInternal } = input
+      const { limit, cursor, sources, eventTypes, entityType, entityId, search, dateFrom, dateTo, includeInternal, collapsed } = input
 
       // Build conditions
       const conditions = [eq(timelineEvents.tenantId, ctx.user!.tenantId)]
@@ -509,6 +567,7 @@ const timelineRouter = t.router({
             occurredAt: timelineEvents.occurredAt,
             isInternal: timelineEvents.isInternal,
             isPinned: timelineEvents.isPinned,
+            collapseGroupKey: timelineEvents.collapseGroupKey,
           })
           .from(timelineEvents)
           .innerJoin(
@@ -541,6 +600,7 @@ const timelineRouter = t.router({
             occurredAt: timelineEvents.occurredAt,
             isInternal: timelineEvents.isInternal,
             isPinned: timelineEvents.isPinned,
+            collapseGroupKey: timelineEvents.collapseGroupKey,
           })
           .from(timelineEvents)
           .where(and(...conditions))
@@ -557,9 +617,20 @@ const timelineRouter = t.router({
         nextCursor = lastEvent?.id
       }
 
+      // If collapsed mode, group events by collapseGroupKey
+      if (collapsed) {
+        const collapsedEvents = collapseTimelineEvents(events)
+        return {
+          events: collapsedEvents,
+          nextCursor,
+          collapsed: true,
+        }
+      }
+
       return {
         events,
         nextCursor,
+        collapsed: false,
       }
     }),
 
@@ -779,6 +850,40 @@ const timelineRouter = t.router({
         bySource: eventsBySource,
         byType: eventsByType,
       }
+    }),
+
+  /**
+   * Expand a collapsed group - get all events with a specific collapseGroupKey
+   */
+  expandGroup: protectedProcedure
+    .input(z.object({
+      collapseGroupKey: z.string(),
+      limit: z.number().min(1).max(100).default(50),
+    }))
+    .query(async ({ ctx, input }) => {
+      const events = await ctx.db
+        .select({
+          id: timelineEvents.id,
+          eventType: timelineEvents.eventType,
+          source: timelineEvents.source,
+          title: timelineEvents.title,
+          summary: timelineEvents.summary,
+          content: timelineEvents.content,
+          actorName: timelineEvents.actorName,
+          occurredAt: timelineEvents.occurredAt,
+          isPinned: timelineEvents.isPinned,
+        })
+        .from(timelineEvents)
+        .where(
+          and(
+            eq(timelineEvents.tenantId, ctx.user!.tenantId),
+            eq(timelineEvents.collapseGroupKey, input.collapseGroupKey)
+          )
+        )
+        .orderBy(desc(timelineEvents.occurredAt))
+        .limit(input.limit)
+
+      return { events }
     }),
 })
 
