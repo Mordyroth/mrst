@@ -24,6 +24,10 @@ import {
   aiMessages,
   embeddings,
   spireonDevices,
+  mondayItems,
+  mondayItemColumnValues,
+  mondayColumns,
+  mondayBoards,
   type UserRole,
   type TimelineEventType,
 } from '@mrst/db/schema'
@@ -1330,10 +1334,13 @@ const aiRouter = t.router({
     }),
 })
 
+// Fleet board external ID in Monday.com
+const FLEET_BOARD_EXTERNAL_ID = '3597643013'
+
 // Vehicles router - GPS locations and fleet data
-// Shows Spireon GPS devices (filters out inactive devices by default)
+// Shows only vehicles in the Monday.com Travel Auto Rental Fleet board (matched by VIN)
 const vehiclesRouter = t.router({
-  // Get all vehicles with current GPS location
+  // Get all vehicles with current GPS location (filtered to fleet board)
   listWithLocation: publicProcedure
     .input(z.object({
       limit: z.number().min(1).max(500).default(100),
@@ -1342,7 +1349,22 @@ const vehiclesRouter = t.router({
     .query(async ({ ctx, input }) => {
       const { limit = 100, activeOnly = true } = input || {}
 
-      // Build filter conditions
+      // Get VINs from Monday fleet board
+      const fleetVins = await ctx.db
+        .select({ vin: sql<string>`UPPER(${mondayItemColumnValues.textValue})` })
+        .from(mondayItemColumnValues)
+        .innerJoin(mondayItems, eq(mondayItemColumnValues.itemId, mondayItems.id))
+        .innerJoin(mondayBoards, eq(mondayItems.boardId, mondayBoards.id))
+        .innerJoin(mondayColumns, eq(mondayItemColumnValues.columnId, mondayColumns.id))
+        .where(and(
+          eq(mondayBoards.externalId, FLEET_BOARD_EXTERNAL_ID),
+          eq(mondayColumns.title, 'VIN'),
+          sql`LENGTH(${mondayItemColumnValues.textValue}) = 17`
+        ))
+
+      const vinSet = new Set(fleetVins.map(v => v.vin?.toUpperCase()).filter(Boolean))
+
+      // Build filter conditions for Spireon devices
       const conditions = []
 
       if (activeOnly) {
@@ -1352,6 +1374,7 @@ const vehiclesRouter = t.router({
       // Filter out devices with "inactive" in their name
       conditions.push(sql`${spireonDevices.name} NOT ILIKE '%inactive%'`)
 
+      // Get Spireon devices
       const devices = await ctx.db.select({
         id: spireonDevices.id,
         name: spireonDevices.name,
@@ -1372,10 +1395,15 @@ const vehiclesRouter = t.router({
         .from(spireonDevices)
         .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(desc(spireonDevices.currentLocationAt))
-        .limit(limit)
+        .limit(500) // Get more to filter, then limit
+
+      // Filter to only devices with VINs in the fleet board
+      const filteredDevices = devices
+        .filter(d => d.vehicleVin && vinSet.has(d.vehicleVin.toUpperCase()))
+        .slice(0, limit)
 
       return {
-        vehicles: devices.map(d => {
+        vehicles: filteredDevices.map(d => {
           // Parse unit number from device name (e.g., "V347 2019 Grey Altima" -> "V347")
           const unitMatch = d.name?.match(/^(V\d+)\s/)
           const unitNumber = unitMatch ? unitMatch[1] : null
@@ -1389,7 +1417,7 @@ const vehiclesRouter = t.router({
             year: d.vehicleYear,
             licensePlate: d.vehicleLicensePlate,
             unitNumber,
-            hqStatus: null, // Would be populated if we had VIN matching
+            hqStatus: null,
             location: d.currentLat && d.currentLng && d.currentLat > -90 && d.currentLat < 90 && d.currentLng > -180 && d.currentLng < 180 ? {
               lat: d.currentLat,
               lng: d.currentLng,
@@ -1402,41 +1430,50 @@ const vehiclesRouter = t.router({
             status: d.status,
           }
         }),
-        total: devices.length,
+        total: filteredDevices.length,
       }
     }),
 
-  // Get summary stats for fleet
+  // Get summary stats for fleet (only vehicles in Monday fleet board)
   stats: publicProcedure.query(async ({ ctx }) => {
+    // Get VINs from Monday fleet board
+    const fleetVins = await ctx.db
+      .select({ vin: sql<string>`UPPER(${mondayItemColumnValues.textValue})` })
+      .from(mondayItemColumnValues)
+      .innerJoin(mondayItems, eq(mondayItemColumnValues.itemId, mondayItems.id))
+      .innerJoin(mondayBoards, eq(mondayItems.boardId, mondayBoards.id))
+      .innerJoin(mondayColumns, eq(mondayItemColumnValues.columnId, mondayColumns.id))
+      .where(and(
+        eq(mondayBoards.externalId, FLEET_BOARD_EXTERNAL_ID),
+        eq(mondayColumns.title, 'VIN'),
+        sql`LENGTH(${mondayItemColumnValues.textValue}) = 17`
+      ))
+
+    const vinSet = new Set(fleetVins.map(v => v.vin?.toUpperCase()).filter(Boolean))
+
     // Base filter: exclude inactive devices
     const baseCondition = sql`${spireonDevices.name} NOT ILIKE '%inactive%'`
 
-    // Count total active devices
-    const totalResult = await ctx.db.select({ count: sql<number>`count(*)` })
+    // Get all Spireon devices (non-inactive)
+    const allDevices = await ctx.db
+      .select({
+        vehicleVin: spireonDevices.vehicleVin,
+        isOnline: spireonDevices.isOnline,
+        currentLocationAt: spireonDevices.currentLocationAt,
+        ignitionOn: spireonDevices.ignitionOn,
+      })
       .from(spireonDevices)
       .where(baseCondition)
 
-    // Count online devices
-    const activeResult = await ctx.db.select({ count: sql<number>`count(*)` })
-      .from(spireonDevices)
-      .where(and(baseCondition, eq(spireonDevices.isOnline, true)))
-
-    // Count devices with recent location (last 24h)
+    // Filter to fleet VINs and count
+    const fleetDevices = allDevices.filter(d => d.vehicleVin && vinSet.has(d.vehicleVin.toUpperCase()))
     const recentDate = new Date(Date.now() - 24 * 60 * 60 * 1000)
-    const recentResult = await ctx.db.select({ count: sql<number>`count(*)` })
-      .from(spireonDevices)
-      .where(and(baseCondition, gte(spireonDevices.currentLocationAt, recentDate)))
-
-    // Count devices with ignition on
-    const movingResult = await ctx.db.select({ count: sql<number>`count(*)` })
-      .from(spireonDevices)
-      .where(and(baseCondition, eq(spireonDevices.ignitionOn, true)))
 
     return {
-      total: Number(totalResult[0]?.count || 0),
-      active: Number(activeResult[0]?.count || 0),
-      recentLocation: Number(recentResult[0]?.count || 0),
-      moving: Number(movingResult[0]?.count || 0),
+      total: fleetDevices.length,
+      active: fleetDevices.filter(d => d.isOnline).length,
+      recentLocation: fleetDevices.filter(d => d.currentLocationAt && d.currentLocationAt >= recentDate).length,
+      moving: fleetDevices.filter(d => d.ignitionOn).length,
     }
   }),
 })

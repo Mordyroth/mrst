@@ -130,7 +130,7 @@ export default function MapPage() {
           <div>
             <h1 className="text-3xl font-bold">Fleet Map</h1>
             <p className="mt-1 text-muted-foreground">
-              Real-time GPS locations for fleet vehicles
+              Real-time GPS locations for Travel Auto Rental Fleet
             </p>
           </div>
           <label className="flex items-center gap-2">
