@@ -3,26 +3,23 @@
 > This file is the source of truth for project state. Read this first every session.
 
 ## Current Status
-- **Phase:** 1 - Monday.com Mirror
-- **Task:** Phase 1 Complete
-- **Progress:** 100%
+- **Phase:** 2 - HQ Rental Mirror
+- **Task:** Phase 2 Complete (core sync)
+- **Progress:** 90%
 - **Blockers:** None
 
 ## Last Session
 - **Date:** 2026-01-07
-- **Duration:** ~3 hours
-- **Completed:** Monday.com sync (workspaces, boards, columns, items, updates, activity, users)
-- **Stopped at:** File download to S3 remaining
+- **Duration:** ~4 hours
+- **Completed:** HQ REST client, sync service, worker jobs, full data sync
+- **Stopped at:** Core tables (core_customers, core_vehicles) and external_links remaining
 
 ## Next Steps (Ordered)
-1. Implement file download to S3 (Phase 1 completion)
-2. Begin Phase 2: HQ Rental Mirror
-3. Create HQ REST client
-4. Implement customer sync
-5. Implement vehicle sync
-6. Implement reservation sync
-7. Implement contract/payment/charge sync
-8. Populate core_customers and core_vehicles
+1. Populate core_customers from hq_customers
+2. Populate core_vehicles from hq_vehicles
+3. Create external_links between HQ and core entities
+4. Begin Phase 3: Timeline v1
+5. Create timeline_events from Monday and HQ data
 
 ## Phase Checklist
 
@@ -49,17 +46,18 @@
 - [x] Sync jobs created (SYNC_MONDAY_FULL, SYNC_MONDAY_INCREMENTAL, SYNC_MONDAY_BOARD, DOWNLOAD_FILE)
 - [x] Tested with top 5 boards by item count
 
-### Phase 2: HQ Rental Mirror
-- [ ] REST client created
-- [ ] Customers synced
-- [ ] Vehicles synced
-- [ ] Reservations synced
-- [ ] Contracts/payments/charges synced
-- [ ] Documents downloaded
+### Phase 2: HQ Rental Mirror ⏳ IN PROGRESS (90%)
+- [x] REST client created (Basic Auth, rate limiting, retry logic)
+- [x] Customers synced (2,383 customers from reservation details)
+- [x] Vehicles synced (243 vehicles)
+- [x] Reservations synced (3,250 reservations)
+- [x] Contracts synced (70 active rentals)
+- [x] Documents synced (2,209 customer documents)
+- [x] Document download to S3 function added (downloadPendingDocuments)
+- [x] Sync jobs created (SYNC_HQ_FULL, SYNC_HQ_INCREMENTAL)
 - [ ] core_customers populated
 - [ ] core_vehicles populated
 - [ ] external_links created
-- [ ] Sync jobs created
 
 ### Phase 3: Timeline v1
 - [ ] timeline_events from Monday
@@ -111,7 +109,7 @@
 | Integration | Client | Schema | Sync Job | Tested | Timeline |
 |-------------|--------|--------|----------|--------|----------|
 | Monday.com  | ✅ | ✅ | ✅ | ✅ | ❌ |
-| HQ Rental   | ❌ | ✅ | ❌ | ❌ | ❌ |
+| HQ Rental   | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Gmail       | ❌ | ✅ | ❌ | ❌ | ❌ |
 | Spireon     | ❌ | ✅ | ❌ | ❌ | ❌ |
 | WhatsApp    | ❌ | ✅ | ❌ | ❌ | ❌ |
@@ -238,16 +236,40 @@ Synced to Database:
   Files:           0 (sync pending)
 ```
 
+## Files Created (Phase 2)
+
+### packages/integrations/src/hq/
+- client.ts (REST client with Basic Auth, rate limiting, retry logic)
+- types.ts (TypeScript interfaces for HQ API responses)
+- sync.ts (Sync service: syncAll, syncIncremental, downloadPendingDocuments - 800 lines)
+- test-sync.ts (Test script for sync validation)
+- index.ts (Module exports)
+
+### apps/worker/src/
+- index.ts (Updated with HQ sync job handlers)
+
+## Test Results (Phase 2)
+```
+Synced to Database:
+  Customers:     2,383
+  Vehicles:      243
+  Reservations:  3,250
+  Contracts:     70 (active rentals)
+  Documents:     2,209
+
+HQ API Notes:
+- Reservation-centric API (no direct customer/vehicle endpoints)
+- Customers/vehicles extracted from reservation details
+- One HQ API 500 error on reservation #774 (server-side bug)
+```
+
 ## Notes for Next Session
-Phase 1 Monday.com Mirror is COMPLETE. Ready for Phase 2:
-1. Begin Phase 2 - HQ Rental Mirror
-2. Read HQ Rental API documentation
-3. Create REST client
-4. Implement customer sync
-5. Implement vehicle sync
+Phase 2 HQ Rental Mirror is 90% complete. Remaining tasks:
+1. Populate core_customers from hq_customers
+2. Populate core_vehicles from hq_vehicles
+3. Create external_links between HQ and core entities
 
-Note: Board IDs in API_CREDENTIALS.md don't match the Monday.com account.
-Test script syncs top 5 boards by item count instead.
+Then ready for Phase 3: Timeline v1
 
-TypeScript strictness: Some TS errors in integrations/sync.ts due to noUncheckedIndexedAccess.
-Code works correctly at runtime but needs proper null checks for strict mode.
+TypeScript strictness: Some TS errors in Monday.com sync code due to noUncheckedIndexedAccess.
+HQ code uses proper null checks and type assertions.

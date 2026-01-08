@@ -1,7 +1,10 @@
 /**
- * HQ Rental integration client
- * REST API with Basic auth
+ * HQ Rental Software Integration
+ * REST API client for CAAG CRM
  */
 
-// Will be implemented in Phase 2
-export const HQ_CLIENT_VERSION = '0.1.0'
+export * from './client'
+export * from './types'
+export * from './sync'
+
+export const HQ_CLIENT_VERSION = '1.0.0'

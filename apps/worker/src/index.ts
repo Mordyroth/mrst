@@ -15,6 +15,13 @@ import {
   downloadPendingFiles,
   type SyncContext,
 } from '@mrst/integrations/monday'
+import {
+  HQClient,
+  syncAll as hqSyncAll,
+  syncIncremental as hqSyncIncremental,
+  downloadPendingDocuments as hqDownloadPendingDocuments,
+  type SyncContext as HQSyncContext,
+} from '@mrst/integrations/hq'
 
 // Job types
 export const JOB_TYPES = {
@@ -51,6 +58,12 @@ interface MondayBoardSyncJobData extends MondaySyncJobData {
   boardId: string
   syncActivity?: boolean
   activityDays?: number
+}
+
+interface HQSyncJobData {
+  integrationAccountId: string
+  tenantId: string
+  days?: number // for incremental sync
 }
 
 // Global instances
@@ -139,6 +152,64 @@ async function getMondayClient(db: Database, integrationAccountId: string): Prom
   }
 
   return new MondayClient({ apiKey: credentials.apiKey })
+}
+
+/**
+ * Get HQ Rental client for an integration account
+ */
+async function getHQClient(db: Database, integrationAccountId: string): Promise<HQClient | null> {
+  const account = await db
+    .select({ credentials: integrationAccounts.credentials })
+    .from(integrationAccounts)
+    .where(
+      and(
+        eq(integrationAccounts.id, integrationAccountId),
+        eq(integrationAccounts.type, 'hq'),
+        eq(integrationAccounts.isActive, true)
+      )
+    )
+    .limit(1)
+
+  const firstAccount = account[0]
+  if (!firstAccount) {
+    return null
+  }
+
+  const credentials = firstAccount.credentials as { tenantToken: string; userToken: string; baseUrl?: string }
+  if (!credentials?.tenantToken || !credentials?.userToken) {
+    return null
+  }
+
+  return new HQClient({
+    tenantToken: credentials.tenantToken,
+    userToken: credentials.userToken,
+    baseUrl: credentials.baseUrl,
+  })
+}
+
+/**
+ * Create sync context for HQ Rental
+ */
+function createHQSyncContext(
+  db: Database,
+  client: HQClient,
+  integrationAccountId: string,
+  tenantId: string,
+  jobId: string
+): HQSyncContext {
+  return {
+    db,
+    client,
+    integrationAccountId,
+    tenantId,
+    onProgress: (message, counts) => {
+      if (counts) {
+        console.log(`[Worker:${jobId}] ${message} - created: ${counts.created}, updated: ${counts.updated}, unchanged: ${counts.unchanged}`)
+      } else {
+        console.log(`[Worker:${jobId}] ${message}`)
+      }
+    },
+  }
 }
 
 /**
@@ -305,20 +376,87 @@ async function registerHandlers(boss: PgBoss, db: Database): Promise<void> {
     }
   })
 
-  // HQ sync jobs
-  await boss.work(JOB_TYPES.SYNC_HQ_FULL, { batchSize: 1 }, async (jobs) => {
+  // HQ full sync - sync all reservations
+  await boss.work<HQSyncJobData>(JOB_TYPES.SYNC_HQ_FULL, { batchSize: 1 }, async (jobs) => {
     for (const job of jobs) {
       console.log(`[Worker] Processing ${JOB_TYPES.SYNC_HQ_FULL}:`, job.id)
-      // Will be implemented in Phase 2
-      return { status: 'not_implemented' }
+
+      const { integrationAccountId, tenantId } = job.data
+      const client = await getHQClient(db, integrationAccountId)
+
+      if (!client) {
+        console.error(`[Worker:${job.id}] HQ client not available for account ${integrationAccountId}`)
+        return { status: 'error', error: 'Client not available' }
+      }
+
+      const ctx = createHQSyncContext(db, client, integrationAccountId, tenantId, job.id)
+
+      try {
+        // Full sync
+        const result = await hqSyncAll(ctx, { batchSize: 10 })
+
+        console.log(`[Worker:${job.id}] HQ full sync results:`)
+        console.log(`  Reservations: ${result.reservations.success ? 'OK' : 'FAILED'} (${result.reservations.counts.created} created)`)
+        console.log(`  Customers: ${result.customers.success ? 'OK' : 'FAILED'} (${result.customers.counts.created} created)`)
+        console.log(`  Vehicles: ${result.vehicles.success ? 'OK' : 'FAILED'} (${result.vehicles.counts.created} created)`)
+
+        // Also download pending documents
+        const docResult = await hqDownloadPendingDocuments(ctx, { batchSize: 5, maxFiles: 100 })
+        console.log(`  Documents: ${docResult.success ? 'OK' : 'FAILED'} (${docResult.counts.updated} downloaded)`)
+
+        return {
+          status: 'success',
+          reservations: result.reservations.counts,
+          customers: result.customers.counts,
+          vehicles: result.vehicles.counts,
+          documents: docResult.counts,
+        }
+      } catch (error) {
+        console.error(`[Worker:${job.id}] HQ full sync failed:`, error)
+        return { status: 'error', error: (error as Error).message }
+      }
     }
   })
 
-  await boss.work(JOB_TYPES.SYNC_HQ_INCREMENTAL, { batchSize: 1 }, async (jobs) => {
+  // HQ incremental sync - sync recent reservations
+  await boss.work<HQSyncJobData>(JOB_TYPES.SYNC_HQ_INCREMENTAL, { batchSize: 1 }, async (jobs) => {
     for (const job of jobs) {
       console.log(`[Worker] Processing ${JOB_TYPES.SYNC_HQ_INCREMENTAL}:`, job.id)
-      // Will be implemented in Phase 2
-      return { status: 'not_implemented' }
+
+      const { integrationAccountId, tenantId, days = 7 } = job.data
+      const client = await getHQClient(db, integrationAccountId)
+
+      if (!client) {
+        console.error(`[Worker:${job.id}] HQ client not available for account ${integrationAccountId}`)
+        return { status: 'error', error: 'Client not available' }
+      }
+
+      const ctx = createHQSyncContext(db, client, integrationAccountId, tenantId, job.id)
+
+      try {
+        // Incremental sync - last N days
+        const result = await hqSyncIncremental(ctx, { days })
+
+        console.log(`[Worker:${job.id}] HQ incremental sync (${days} days) results:`)
+        console.log(`  Reservations: ${result.reservations.counts.processed} processed`)
+        console.log(`  Customers: ${result.customers.counts.created} new`)
+        console.log(`  Vehicles: ${result.vehicles.counts.created} new`)
+
+        // Also download pending documents
+        const docResult = await hqDownloadPendingDocuments(ctx, { batchSize: 5, maxFiles: 50 })
+        console.log(`  Documents: ${docResult.counts.updated} downloaded`)
+
+        return {
+          status: 'success',
+          reservations: result.reservations.counts,
+          customers: result.customers.counts,
+          vehicles: result.vehicles.counts,
+          documents: docResult.counts,
+        }
+      } catch (error) {
+        console.error(`[Worker:${job.id}] HQ incremental sync failed:`, error)
+        return { status: 'error', error: (error as Error).message }
+      }
     }
   })
 
