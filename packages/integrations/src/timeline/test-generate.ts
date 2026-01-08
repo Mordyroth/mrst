@@ -70,6 +70,11 @@ async function main() {
       const contracts = await timeline.generateFromHQContracts(ctx)
       console.log(`  Contracts: ${contracts.created} created, ${contracts.skipped} skipped`)
     }
+
+    if (account.type === 'gmail') {
+      const messages = await timeline.generateFromGmailMessages(ctx)
+      console.log(`  Messages: ${messages.created} created, ${messages.skipped} skipped`)
+    }
   }
 
   // Summary

@@ -3,7 +3,7 @@
  * Creates timeline_events from various data sources
  */
 
-import { eq, and, isNull, sql, desc } from 'drizzle-orm'
+import { eq, and, isNull, sql, desc, inArray } from 'drizzle-orm'
 import {
   timelineEvents,
   timelineEventLinks,
@@ -15,6 +15,10 @@ import {
   hqReservations,
   hqContracts,
   hqCustomers,
+  gmailMessages,
+  gmailAccounts,
+  gmailAttachments,
+  coreCustomers,
   externalLinks,
   type Database,
   type TimelineEventType,
@@ -757,6 +761,210 @@ export async function generateFromHQContracts(
 }
 
 /**
+ * Generate timeline events from Gmail messages
+ */
+export async function generateFromGmailMessages(
+  ctx: GenerateContext
+): Promise<GenerateResult> {
+  let created = 0
+  let skipped = 0
+
+  try {
+    ctx.onProgress?.('Fetching Gmail messages without timeline events...')
+
+    // Get messages that don't have timeline events yet
+    const messages = await ctx.db
+      .select({
+        id: gmailMessages.id,
+        externalId: gmailMessages.externalId,
+        gmailAccountId: gmailMessages.gmailAccountId,
+        threadId: gmailMessages.threadId,
+        subject: gmailMessages.subject,
+        fromEmail: gmailMessages.fromEmail,
+        fromName: gmailMessages.fromName,
+        toEmails: gmailMessages.toEmails,
+        ccEmails: gmailMessages.ccEmails,
+        snippet: gmailMessages.snippet,
+        internalDate: gmailMessages.internalDate,
+        sentAt: gmailMessages.sentAt,
+        isSent: gmailMessages.isSent,
+        isInbox: gmailMessages.isInbox,
+        labelIds: gmailMessages.labelIds,
+      })
+      .from(gmailMessages)
+      .leftJoin(
+        timelineEvents,
+        and(
+          eq(timelineEvents.source, 'gmail'),
+          eq(timelineEvents.sourceEntityType, 'gmail_message'),
+          eq(timelineEvents.sourceEntityId, gmailMessages.id)
+        )
+      )
+      .where(
+        and(
+          eq(gmailMessages.integrationAccountId, ctx.integrationAccountId),
+          isNull(gmailMessages.deletedAt),
+          isNull(timelineEvents.id)
+        )
+      )
+      .orderBy(desc(gmailMessages.internalDate))
+      .limit(5000) // Process in batches
+
+    ctx.onProgress?.(`Found ${messages.length} Gmail messages to process`)
+
+    // Build a map of email -> core_customer_id for linking
+    const allEmails = new Set<string>()
+    for (const msg of messages) {
+      if (msg.fromEmail) allEmails.add(msg.fromEmail.toLowerCase())
+      if (msg.toEmails) {
+        for (const email of msg.toEmails as string[]) {
+          allEmails.add(email.toLowerCase())
+        }
+      }
+    }
+
+    // Look up customers by email
+    const customersByEmail = new Map<string, string>()
+    if (allEmails.size > 0) {
+      const customers = await ctx.db
+        .select({ id: coreCustomers.id, email: coreCustomers.primaryEmail })
+        .from(coreCustomers)
+        .where(
+          and(
+            eq(coreCustomers.tenantId, ctx.tenantId),
+            inArray(coreCustomers.primaryEmail, [...allEmails])
+          )
+        )
+      for (const c of customers) {
+        if (c.email) customersByEmail.set(c.email.toLowerCase(), c.id)
+      }
+    }
+
+    // Get Gmail account info for determining internal vs external
+    const accountsById = new Map<string, { emailAddress: string }>()
+    const accountIds = [...new Set(messages.map(m => m.gmailAccountId))]
+    if (accountIds.length > 0) {
+      const accounts = await ctx.db
+        .select({ id: gmailAccounts.id, emailAddress: gmailAccounts.emailAddress })
+        .from(gmailAccounts)
+        .where(inArray(gmailAccounts.id, accountIds))
+      for (const a of accounts) {
+        accountsById.set(a.id, { emailAddress: a.emailAddress })
+      }
+    }
+
+    for (const message of messages) {
+      try {
+        const account = accountsById.get(message.gmailAccountId)
+        const accountEmail = account?.emailAddress?.toLowerCase()
+
+        // Determine if sent or received
+        const isSent = message.isSent || message.fromEmail?.toLowerCase() === accountEmail
+        const eventType: TimelineEventType = isSent ? 'gmail_sent' : 'gmail_received'
+
+        // Build title and summary
+        const title = message.subject || '(No Subject)'
+        const participants = isSent
+          ? (message.toEmails as string[] || []).join(', ')
+          : message.fromName || message.fromEmail || 'Unknown'
+        const summary = `${isSent ? 'To' : 'From'}: ${participants}`
+
+        // Count attachments
+        const attachmentCount = await ctx.db
+          .select({ count: sql<number>`count(*)` })
+          .from(gmailAttachments)
+          .where(eq(gmailAttachments.messageId, message.id))
+        const numAttachments = Number(attachmentCount[0]?.count || 0)
+
+        const eventResult = await ctx.db
+          .insert(timelineEvents)
+          .values({
+            tenantId: ctx.tenantId,
+            eventType,
+            source: 'gmail',
+            sourceEntityType: 'gmail_message',
+            sourceEntityId: message.id,
+            externalId: message.externalId,
+            title,
+            summary,
+            content: message.snippet,
+            metadata: {
+              labelIds: message.labelIds,
+              attachmentCount: numAttachments,
+              toEmails: message.toEmails,
+              ccEmails: message.ccEmails,
+            },
+            actorType: isSent ? 'internal' : 'external',
+            actorName: message.fromName,
+            actorEmail: message.fromEmail,
+            occurredAt: message.sentAt || message.internalDate || new Date(),
+            collapseGroupKey: `gmail_thread_${message.threadId}`,
+          })
+          .returning({ id: timelineEvents.id })
+
+        const event = eventResult[0]
+        if (!event) continue
+
+        // Link to Gmail message
+        await ctx.db.insert(timelineEventLinks).values({
+          timelineEventId: event.id,
+          entityType: 'gmail_message',
+          entityId: message.id,
+          linkType: 'primary',
+        })
+
+        // Link to core customer based on email addresses
+        const linkedCustomerIds = new Set<string>()
+
+        // Check from email
+        if (message.fromEmail) {
+          const customerId = customersByEmail.get(message.fromEmail.toLowerCase())
+          if (customerId && !linkedCustomerIds.has(customerId)) {
+            await ctx.db.insert(timelineEventLinks).values({
+              timelineEventId: event.id,
+              entityType: 'customer',
+              entityId: customerId,
+              linkType: 'related',
+            })
+            linkedCustomerIds.add(customerId)
+          }
+        }
+
+        // Check to emails
+        if (message.toEmails) {
+          for (const email of message.toEmails as string[]) {
+            const customerId = customersByEmail.get(email.toLowerCase())
+            if (customerId && !linkedCustomerIds.has(customerId)) {
+              await ctx.db.insert(timelineEventLinks).values({
+                timelineEventId: event.id,
+                entityType: 'customer',
+                entityId: customerId,
+                linkType: 'related',
+              })
+              linkedCustomerIds.add(customerId)
+            }
+          }
+        }
+
+        created++
+
+        if (created % 500 === 0) {
+          ctx.onProgress?.(`Gmail messages: ${created} created...`, { created, skipped })
+        }
+      } catch (err) {
+        console.error(`Error creating timeline event for Gmail message ${message.id}:`, err)
+        skipped++
+      }
+    }
+
+    ctx.onProgress?.(`Gmail messages: ${created} created, ${skipped} skipped`, { created, skipped })
+    return { success: true, created, skipped }
+  } catch (error) {
+    return { success: false, created, skipped, error: (error as Error).message }
+  }
+}
+
+/**
  * Generate all timeline events from all sources
  */
 export async function generateAll(
@@ -767,6 +975,7 @@ export async function generateAll(
   mondayActivity: GenerateResult
   hqReservations: GenerateResult
   hqContracts: GenerateResult
+  gmailMessages: GenerateResult
 }> {
   ctx.onProgress?.('Starting timeline event generation...')
 
@@ -775,6 +984,7 @@ export async function generateAll(
   const mondayActivity = await generateFromMondayActivity(ctx)
   const hqReservations = await generateFromHQReservations(ctx)
   const hqContracts = await generateFromHQContracts(ctx)
+  const gmailMessages = await generateFromGmailMessages(ctx)
 
   ctx.onProgress?.('Timeline event generation complete')
 
@@ -784,6 +994,7 @@ export async function generateAll(
     mondayActivity,
     hqReservations,
     hqContracts,
+    gmailMessages,
   }
 }
 

@@ -647,3 +647,133 @@ export async function syncAll(
 
   return { labels, threads, messages }
 }
+
+/**
+ * Download pending Gmail attachments to S3
+ */
+export async function downloadPendingAttachments(
+  ctx: GmailSyncContext,
+  client: GmailClient,
+  options: { batchSize?: number; maxFiles?: number } = {}
+): Promise<SyncResult> {
+  const { batchSize = 10, maxFiles = 500 } = options
+  const rateLimiter = new GmailRateLimiter()
+  let created = 0
+  let skipped = 0
+  let updated = 0
+  let errorCount = 0
+
+  try {
+    ctx.onProgress?.('Fetching pending Gmail attachments to download...')
+
+    // Get attachments that haven't been downloaded to S3
+    const pendingAttachments = await ctx.db
+      .select({
+        id: gmailAttachments.id,
+        externalId: gmailAttachments.externalId,
+        externalMessageId: gmailAttachments.externalMessageId,
+        filename: gmailAttachments.filename,
+        mimeType: gmailAttachments.mimeType,
+        size: gmailAttachments.size,
+      })
+      .from(gmailAttachments)
+      .where(
+        and(
+          eq(gmailAttachments.gmailAccountId, ctx.gmailAccountId),
+          eq(gmailAttachments.s3Downloaded, false)
+        )
+      )
+      .limit(maxFiles)
+
+    if (pendingAttachments.length === 0) {
+      ctx.onProgress?.('No pending Gmail attachments to download')
+      return { success: true, created, updated, skipped }
+    }
+
+    ctx.onProgress?.(`Found ${pendingAttachments.length} attachments to download`)
+
+    // Process in batches
+    for (let i = 0; i < pendingAttachments.length; i += batchSize) {
+      const batch = pendingAttachments.slice(i, i + batchSize)
+
+      for (const attachment of batch) {
+        try {
+          // Download attachment from Gmail
+          const response = await gmailRequest(rateLimiter, () =>
+            client.gmail.users.messages.attachments.get({
+              userId: 'me',
+              messageId: attachment.externalMessageId,
+              id: attachment.externalId,
+            })
+          )
+
+          const attachmentData = response.data
+          if (!attachmentData.data) {
+            console.error(`No data for attachment ${attachment.id}`)
+            errorCount++
+            continue
+          }
+
+          // Decode base64url data
+          const buffer = Buffer.from(attachmentData.data, 'base64url')
+
+          // Generate S3 key
+          const s3Key = `gmail/${ctx.gmailAccountId}/attachments/${attachment.externalMessageId}/${attachment.externalId}_${sanitizeFilename(attachment.filename)}`
+          const s3Bucket = process.env.S3_BUCKET || 'mrst-files'
+
+          // Upload to S3
+          const { uploadToS3 } = await import('@mrst/shared')
+          await uploadToS3({
+            bucket: s3Bucket,
+            key: s3Key,
+            body: buffer,
+            contentType: attachment.mimeType || 'application/octet-stream',
+          })
+
+          // Update database
+          await ctx.db
+            .update(gmailAttachments)
+            .set({
+              s3Downloaded: true,
+              s3Bucket,
+              s3Key,
+              downloadedAt: new Date(),
+            })
+            .where(eq(gmailAttachments.id, attachment.id))
+
+          created++
+
+          if (created % 50 === 0) {
+            ctx.onProgress?.(`Downloaded ${created}/${pendingAttachments.length} attachments...`, {
+              processed: created,
+              total: pendingAttachments.length,
+            })
+          }
+        } catch (err: any) {
+          console.error(`Error downloading attachment ${attachment.id}:`, err.message)
+          errorCount++
+        }
+      }
+    }
+
+    ctx.onProgress?.(`Download complete: ${created} downloaded, ${errorCount} errors`, {
+      processed: created + errorCount,
+      total: pendingAttachments.length,
+    })
+
+    return { success: true, created, updated, skipped }
+  } catch (error) {
+    console.error('Error in downloadPendingAttachments:', error)
+    throw error
+  }
+}
+
+/**
+ * Sanitize filename for S3 key
+ */
+function sanitizeFilename(filename: string): string {
+  return filename
+    .replace(/[^a-zA-Z0-9.-]/g, '_')
+    .replace(/__+/g, '_')
+    .substring(0, 100)
+}

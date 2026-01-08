@@ -60,7 +60,7 @@ async function main() {
         isActive: true,
         credentials: {
           serviceAccountPath: SERVICE_ACCOUNT_PATH,
-          adminEmail: ADMIN_EMAIL,
+          domainAdmins: DOMAIN_ADMINS,
         },
         settings: {
           syncScope: DOMAINS_TO_SYNC,

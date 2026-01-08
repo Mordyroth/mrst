@@ -4,22 +4,21 @@
 
 ## Current Status
 - **Phase:** 4 - Gmail Mirror
-- **Task:** Timeline events from emails
-- **Progress:** 90%
-- **Blockers:** None
+- **Task:** Attachment download to S3
+- **Progress:** 95%
+- **Blockers:** AWS credentials not configured (needed for S3 upload)
 
 ## Last Session
 - **Date:** 2026-01-08
-- **Duration:** ~10 hours
-- **Completed:** Gmail sync working - 14,893 messages, 6,591 attachments synced
-- **Stopped at:** Timeline event generation from emails pending
+- **Duration:** ~11 hours
+- **Completed:** Gmail timeline events created - 14,893 events (9,929 received, 4,964 sent)
+- **Stopped at:** S3 attachment download pending
 
 ## Next Steps (Ordered)
-1. Create timeline events from Gmail messages
-2. Download attachment files to S3
-3. Create history-based incremental sync
-4. Add certifiedautocollision.com domain (needs DWD setup)
-5. Move to Phase 5: Spireon GPS
+1. Download attachment files to S3
+2. Create history-based incremental sync
+3. Add certifiedautocollision.com domain (needs DWD setup)
+4. Move to Phase 5: Spireon GPS
 
 ## Phase Checklist
 
@@ -78,10 +77,10 @@
 - [x] Threads synced (9,039 threads)
 - [x] Messages synced (14,893 messages)
 - [x] Attachments filtered and recorded (6,591 attachments: 4,491 PDFs, 773 JPEGs, 604 PNGs)
+- [x] Timeline events created (14,893 events: 9,929 received, 4,964 sent)
 - [ ] Attachments downloaded to S3
 - [ ] History-based incremental sync
 - [ ] Gap handling (historyId too old)
-- [ ] Timeline events created
 - [ ] certifiedautocollision.com domain (needs DWD setup)
 
 ### Phase 5: Spireon GPS
@@ -144,7 +143,7 @@
 |-------------|--------|--------|----------|--------|----------|
 | Monday.com  | ✅ | ✅ | ✅ | ✅ | ✅ |
 | HQ Rental   | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Gmail       | ✅ | ✅ | ✅ | ✅ | ⏳ |
+| Gmail       | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Spireon     | ❌ | ✅ | ❌ | ❌ | ❌ |
 | WhatsApp    | ❌ | ✅ | ❌ | ❌ | ❌ |
 
@@ -334,24 +333,29 @@ Timeline Events Generated:
 ### packages/integrations/src/gmail/
 - client.ts (Gmail/Admin SDK client with domain-wide delegation - 193 lines)
 - types.ts (Gmail types, junk attachment filtering - 264 lines)
-- sync.ts (Sync service: labels, threads, messages, attachments - 650 lines)
+- sync.ts (Sync service: labels, threads, messages, attachments, S3 download - 780 lines)
+- run-sync.ts (Full sync for known email addresses)
+- sync-messages.ts (Batch message sync)
+- download-attachments.ts (S3 attachment download script)
 - test-sync.ts (Test script with mailbox discovery)
+- test-direct.ts (Connection test)
 - index.ts (Module exports)
 
 ## Notes for Next Session
-Phase 4 Gmail Mirror is 90% complete.
+Phase 4 Gmail Mirror is 95% complete.
 
 **Gmail Sync Results (info@travelautorental.com):**
 - 9,039 threads
 - 14,893 messages
-- 6,591 attachments (with junk filtering)
+- 14,893 timeline events (9,929 received, 4,964 sent)
+- 6,591 attachments recorded (pending S3 download)
   - 4,491 PDFs (1.7 GB)
   - 773 JPEGs (321 MB)
   - 604 PNGs (35 MB)
 
 **Remaining for Phase 4:**
-1. Create timeline events from Gmail messages
-2. Download attachment files to S3
+1. Configure AWS credentials on EC2 (needed for S3 upload)
+2. Run attachment download: `npx tsx packages/integrations/src/gmail/download-attachments.ts`
 3. Implement history-based incremental sync
 4. Set up certifiedautocollision.com domain (needs DWD in Google Admin)
 
@@ -364,6 +368,7 @@ Phase 4 Gmail Mirror is 90% complete.
 **Test Scripts:**
 - `npx tsx packages/integrations/src/gmail/run-sync.ts` - Full sync
 - `npx tsx packages/integrations/src/gmail/sync-messages.ts` - Message-only sync
+- `npx tsx packages/integrations/src/gmail/download-attachments.ts` - S3 download
 - `npx tsx packages/integrations/src/gmail/test-direct.ts` - Test connection
 
 TypeScript strictness: Some TS errors in Monday.com sync code due to noUncheckedIndexedAccess.
