@@ -4,22 +4,22 @@
 
 ## Current Status
 - **Phase:** 2 - HQ Rental Mirror
-- **Task:** Phase 2 Complete (core sync)
-- **Progress:** 90%
+- **Task:** Phase 2 COMPLETE
+- **Progress:** 100%
 - **Blockers:** None
 
 ## Last Session
-- **Date:** 2026-01-07
-- **Duration:** ~4 hours
-- **Completed:** HQ REST client, sync service, worker jobs, full data sync
-- **Stopped at:** Core tables (core_customers, core_vehicles) and external_links remaining
+- **Date:** 2026-01-08
+- **Duration:** ~5 hours
+- **Completed:** HQ REST client, sync service, worker jobs, full data sync, core table population
+- **Stopped at:** Phase 2 complete, ready for Phase 3
 
 ## Next Steps (Ordered)
-1. Populate core_customers from hq_customers
-2. Populate core_vehicles from hq_vehicles
-3. Create external_links between HQ and core entities
-4. Begin Phase 3: Timeline v1
-5. Create timeline_events from Monday and HQ data
+1. Begin Phase 3: Timeline v1
+2. Create timeline_events from Monday updates
+3. Create timeline_events from HQ reservations
+4. Create timeline API endpoint
+5. Create timeline UI component
 
 ## Phase Checklist
 
@@ -46,7 +46,7 @@
 - [x] Sync jobs created (SYNC_MONDAY_FULL, SYNC_MONDAY_INCREMENTAL, SYNC_MONDAY_BOARD, DOWNLOAD_FILE)
 - [x] Tested with top 5 boards by item count
 
-### Phase 2: HQ Rental Mirror ⏳ IN PROGRESS (90%)
+### Phase 2: HQ Rental Mirror ✅ COMPLETE
 - [x] REST client created (Basic Auth, rate limiting, retry logic)
 - [x] Customers synced (2,383 customers from reservation details)
 - [x] Vehicles synced (243 vehicles)
@@ -55,9 +55,9 @@
 - [x] Documents synced (2,209 customer documents)
 - [x] Document download to S3 function added (downloadPendingDocuments)
 - [x] Sync jobs created (SYNC_HQ_FULL, SYNC_HQ_INCREMENTAL)
-- [ ] core_customers populated
-- [ ] core_vehicles populated
-- [ ] external_links created
+- [x] core_customers populated (2,285 created, 98 linked)
+- [x] core_vehicles populated (242 created, 1 linked)
+- [x] external_links created (2,383 customer links, 243 vehicle links)
 
 ### Phase 3: Timeline v1
 - [ ] timeline_events from Monday
@@ -264,12 +264,12 @@ HQ API Notes:
 ```
 
 ## Notes for Next Session
-Phase 2 HQ Rental Mirror is 90% complete. Remaining tasks:
-1. Populate core_customers from hq_customers
-2. Populate core_vehicles from hq_vehicles
-3. Create external_links between HQ and core entities
+Phase 2 HQ Rental Mirror is COMPLETE. Ready for Phase 3: Timeline v1
 
-Then ready for Phase 3: Timeline v1
+Core table summary:
+- 2,285 core_customers (from 2,383 HQ customers - 98 merged)
+- 242 core_vehicles (from 243 HQ vehicles - 1 merged)
+- 2,626 external_links total
 
 TypeScript strictness: Some TS errors in Monday.com sync code due to noUncheckedIndexedAccess.
 HQ code uses proper null checks and type assertions.
