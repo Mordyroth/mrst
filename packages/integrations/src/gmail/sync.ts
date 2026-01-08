@@ -777,3 +777,425 @@ function sanitizeFilename(filename: string): string {
     .replace(/__+/g, '_')
     .substring(0, 100)
 }
+
+/**
+ * Incremental sync using Gmail History API
+ * Only syncs changes since the last known historyId
+ */
+export async function syncIncremental(
+  ctx: GmailSyncContext,
+  client: GmailClient,
+  options: { maxResults?: number } = {}
+): Promise<{
+  success: boolean
+  messagesAdded: number
+  messagesDeleted: number
+  labelsChanged: number
+  historyId: string | null
+  needsFullResync: boolean
+}> {
+  const { maxResults = 500 } = options
+  const rateLimiter = new GmailRateLimiter()
+  let messagesAdded = 0
+  let messagesDeleted = 0
+  let labelsChanged = 0
+  let newHistoryId: string | null = null
+
+  try {
+    // Get current historyId from account
+    const account = await ctx.db
+      .select({
+        historyId: gmailAccounts.historyId,
+        needsFullResync: gmailAccounts.needsFullResync,
+      })
+      .from(gmailAccounts)
+      .where(eq(gmailAccounts.id, ctx.gmailAccountId))
+      .limit(1)
+
+    const currentHistoryId = account[0]?.historyId
+
+    if (!currentHistoryId) {
+      ctx.onProgress?.('No historyId found, need full sync first')
+      return {
+        success: false,
+        messagesAdded: 0,
+        messagesDeleted: 0,
+        labelsChanged: 0,
+        historyId: null,
+        needsFullResync: true,
+      }
+    }
+
+    ctx.onProgress?.(`Fetching history since ${currentHistoryId}...`)
+
+    // Fetch history
+    let pageToken: string | undefined
+    const processedMessageIds = new Set<string>()
+
+    do {
+      try {
+        const response = await gmailRequest(rateLimiter, () =>
+          client.gmail.users.history.list({
+            userId: 'me',
+            startHistoryId: currentHistoryId,
+            maxResults,
+            pageToken,
+            historyTypes: ['messageAdded', 'messageDeleted', 'labelAdded', 'labelRemoved'],
+          })
+        )
+
+        const history = response.data.history || []
+        newHistoryId = response.data.historyId || null
+
+        for (const record of history) {
+          // Process added messages
+          if (record.messagesAdded) {
+            for (const added of record.messagesAdded) {
+              const msgId = added.message?.id
+              if (msgId && !processedMessageIds.has(msgId)) {
+                processedMessageIds.add(msgId)
+                try {
+                  // Fetch full message details
+                  const msgResponse = await gmailRequest(rateLimiter, () =>
+                    client.gmail.users.messages.get({
+                      userId: 'me',
+                      id: msgId,
+                      format: 'full',
+                    })
+                  )
+
+                  const message = msgResponse.data
+                  if (message.threadId) {
+                    // Ensure thread exists
+                    await ensureThread(ctx, client, rateLimiter, message.threadId)
+                    // Sync the message
+                    await syncSingleMessage(ctx, message)
+                    messagesAdded++
+                  }
+                } catch (err: any) {
+                  if (err.code === 404) {
+                    // Message was deleted before we could fetch it
+                    continue
+                  }
+                  console.error(`Error fetching message ${msgId}:`, err.message)
+                }
+              }
+            }
+          }
+
+          // Process deleted messages
+          if (record.messagesDeleted) {
+            for (const deleted of record.messagesDeleted) {
+              const msgId = deleted.message?.id
+              if (msgId) {
+                await ctx.db
+                  .update(gmailMessages)
+                  .set({ deletedAt: new Date() })
+                  .where(
+                    and(
+                      eq(gmailMessages.gmailAccountId, ctx.gmailAccountId),
+                      eq(gmailMessages.externalId, msgId)
+                    )
+                  )
+                messagesDeleted++
+              }
+            }
+          }
+
+          // Process label changes
+          if (record.labelsAdded || record.labelsRemoved) {
+            const msgs = [...(record.labelsAdded || []), ...(record.labelsRemoved || [])]
+            for (const change of msgs) {
+              const msgId = change.message?.id
+              const labelIds = change.message?.labelIds || []
+              if (msgId) {
+                await ctx.db
+                  .update(gmailMessages)
+                  .set({
+                    labelIds,
+                    isUnread: labelIds.includes('UNREAD'),
+                    isStarred: labelIds.includes('STARRED'),
+                    isImportant: labelIds.includes('IMPORTANT'),
+                    isInbox: labelIds.includes('INBOX'),
+                    isTrash: labelIds.includes('TRASH'),
+                    isSpam: labelIds.includes('SPAM'),
+                    lastSeenAt: new Date(),
+                    syncedAt: new Date(),
+                  })
+                  .where(
+                    and(
+                      eq(gmailMessages.gmailAccountId, ctx.gmailAccountId),
+                      eq(gmailMessages.externalId, msgId)
+                    )
+                  )
+                labelsChanged++
+              }
+            }
+          }
+        }
+
+        pageToken = response.data.nextPageToken || undefined
+      } catch (err: any) {
+        // Handle historyId too old error
+        if (err.code === 404 || err.message?.includes('historyId')) {
+          ctx.onProgress?.('History too old, marking for full resync')
+          await ctx.db
+            .update(gmailAccounts)
+            .set({ needsFullResync: true })
+            .where(eq(gmailAccounts.id, ctx.gmailAccountId))
+
+          return {
+            success: false,
+            messagesAdded,
+            messagesDeleted,
+            labelsChanged,
+            historyId: currentHistoryId,
+            needsFullResync: true,
+          }
+        }
+        throw err
+      }
+    } while (pageToken)
+
+    // Update historyId in database
+    if (newHistoryId) {
+      await ctx.db
+        .update(gmailAccounts)
+        .set({
+          historyId: newHistoryId,
+          needsFullResync: false,
+          syncedAt: new Date(),
+        })
+        .where(eq(gmailAccounts.id, ctx.gmailAccountId))
+    }
+
+    ctx.onProgress?.(
+      `Incremental sync complete: ${messagesAdded} added, ${messagesDeleted} deleted, ${labelsChanged} labels changed`
+    )
+
+    return {
+      success: true,
+      messagesAdded,
+      messagesDeleted,
+      labelsChanged,
+      historyId: newHistoryId,
+      needsFullResync: false,
+    }
+  } catch (error) {
+    console.error('Error in syncIncremental:', error)
+    throw error
+  }
+}
+
+/**
+ * Ensure a thread exists in the database
+ */
+async function ensureThread(
+  ctx: GmailSyncContext,
+  client: GmailClient,
+  rateLimiter: GmailRateLimiter,
+  threadId: string
+): Promise<string> {
+  // Check if thread exists
+  const existing = await ctx.db
+    .select({ id: gmailThreads.id })
+    .from(gmailThreads)
+    .where(
+      and(
+        eq(gmailThreads.gmailAccountId, ctx.gmailAccountId),
+        eq(gmailThreads.externalId, threadId)
+      )
+    )
+    .limit(1)
+
+  if (existing[0]) {
+    return existing[0].id
+  }
+
+  // Fetch thread from Gmail
+  const response = await gmailRequest(rateLimiter, () =>
+    client.gmail.users.threads.get({
+      userId: 'me',
+      id: threadId,
+      format: 'metadata',
+      metadataHeaders: ['Subject', 'From', 'To', 'Date'],
+    })
+  )
+
+  const threadData = response.data
+  const raw = threadData as Record<string, unknown>
+  const sourceHash = hashObject(raw)
+
+  // Extract subject from first message
+  let subject: string | null = null
+  const messages = threadData.messages || []
+  if (messages[0]?.payload?.headers) {
+    const subjectHeader = messages[0].payload.headers.find(
+      (h: any) => h.name?.toLowerCase() === 'subject'
+    )
+    subject = subjectHeader?.value || null
+  }
+
+  // Get participant emails
+  const participantEmails: string[] = []
+  for (const msg of messages) {
+    if (msg.payload?.headers) {
+      for (const header of msg.payload.headers) {
+        if (['from', 'to', 'cc'].includes(header.name?.toLowerCase() || '')) {
+          const emails = parseEmailAddresses(header.value || '')
+          participantEmails.push(...emails)
+        }
+      }
+    }
+  }
+
+  // Get timing
+  let firstMessageAt: Date | null = null
+  let lastMessageAt: Date | null = null
+  for (const msg of messages) {
+    if (msg.internalDate) {
+      const date = new Date(parseInt(msg.internalDate))
+      if (!firstMessageAt || date < firstMessageAt) firstMessageAt = date
+      if (!lastMessageAt || date > lastMessageAt) lastMessageAt = date
+    }
+  }
+
+  // Create thread
+  const [newThread] = await ctx.db
+    .insert(gmailThreads)
+    .values({
+      integrationAccountId: ctx.integrationAccountId,
+      gmailAccountId: ctx.gmailAccountId,
+      externalId: threadId,
+      historyId: threadData.historyId || null,
+      snippet: threadData.snippet || null,
+      subject,
+      participantEmails: [...new Set(participantEmails)],
+      messageCount: messages.length,
+      firstMessageAt,
+      lastMessageAt,
+      labelIds: messages[0]?.labelIds || [],
+      raw,
+      sourceHash,
+    })
+    .returning({ id: gmailThreads.id })
+
+  return newThread!.id
+}
+
+/**
+ * Sync a single message to the database
+ */
+async function syncSingleMessage(
+  ctx: GmailSyncContext,
+  message: any
+): Promise<void> {
+  if (!message.id || !message.threadId) return
+
+  // Get thread ID from database
+  const thread = await ctx.db
+    .select({ id: gmailThreads.id })
+    .from(gmailThreads)
+    .where(
+      and(
+        eq(gmailThreads.gmailAccountId, ctx.gmailAccountId),
+        eq(gmailThreads.externalId, message.threadId)
+      )
+    )
+    .limit(1)
+
+  if (!thread[0]) {
+    console.error(`Thread not found for message ${message.id}`)
+    return
+  }
+
+  const raw = message as Record<string, unknown>
+  const sourceHash = hashObject(raw)
+
+  const headers = extractHeaders(message.payload)
+  const fromParsed = parseFromHeader(headers['from'])
+  const toEmails = parseEmailAddresses(headers['to'])
+  const ccEmails = parseEmailAddresses(headers['cc'])
+  const bccEmails = parseEmailAddresses(headers['bcc'])
+  const body = extractBody(message.payload)
+
+  const labelIds = message.labelIds || []
+
+  // Check if message exists
+  const existing = await ctx.db
+    .select({ id: gmailMessages.id })
+    .from(gmailMessages)
+    .where(
+      and(
+        eq(gmailMessages.gmailAccountId, ctx.gmailAccountId),
+        eq(gmailMessages.externalId, message.id)
+      )
+    )
+    .limit(1)
+
+  if (existing[0]) {
+    // Update existing message
+    await ctx.db
+      .update(gmailMessages)
+      .set({
+        labelIds,
+        isUnread: labelIds.includes('UNREAD'),
+        isStarred: labelIds.includes('STARRED'),
+        isImportant: labelIds.includes('IMPORTANT'),
+        isInbox: labelIds.includes('INBOX'),
+        isTrash: labelIds.includes('TRASH'),
+        isSpam: labelIds.includes('SPAM'),
+        lastSeenAt: new Date(),
+        syncedAt: new Date(),
+        sourceHash,
+        raw,
+      })
+      .where(eq(gmailMessages.id, existing[0].id))
+    return
+  }
+
+  // Create new message
+  const [newMessage] = await ctx.db
+    .insert(gmailMessages)
+    .values({
+      integrationAccountId: ctx.integrationAccountId,
+      gmailAccountId: ctx.gmailAccountId,
+      threadId: thread[0].id,
+      externalId: message.id,
+      externalThreadId: message.threadId,
+      historyId: message.historyId || null,
+      subject: headers['subject'] || null,
+      fromEmail: fromParsed.email,
+      fromName: fromParsed.name,
+      toEmails,
+      ccEmails,
+      bccEmails,
+      replyTo: headers['reply-to'] || null,
+      messageIdHeader: headers['message-id'] || null,
+      inReplyTo: headers['in-reply-to'] || null,
+      references: headers['references'] || null,
+      snippet: message.snippet || null,
+      bodyPlain: body.plain,
+      bodyHtml: body.html,
+      internalDate: message.internalDate ? new Date(parseInt(message.internalDate)) : null,
+      sentAt: headers['date'] ? new Date(headers['date']) : null,
+      labelIds,
+      isUnread: labelIds.includes('UNREAD'),
+      isStarred: labelIds.includes('STARRED'),
+      isImportant: labelIds.includes('IMPORTANT'),
+      isDraft: labelIds.includes('DRAFT'),
+      isSent: labelIds.includes('SENT'),
+      isInbox: labelIds.includes('INBOX'),
+      isTrash: labelIds.includes('TRASH'),
+      isSpam: labelIds.includes('SPAM'),
+      sizeEstimate: message.sizeEstimate || null,
+      raw,
+      sourceHash,
+    })
+    .returning({ id: gmailMessages.id })
+
+  // Sync attachments
+  if (newMessage) {
+    await syncAttachmentsForMessage(ctx, newMessage.id, message)
+  }
+}

@@ -3,10 +3,10 @@
 > This file is the source of truth for project state. Read this first every session.
 
 ## Current Status
-- **Phase:** 4 - Gmail Mirror
-- **Task:** History-based incremental sync
-- **Progress:** 98%
-- **Blockers:** None
+- **Phase:** 4 - Gmail Mirror (nearly complete)
+- **Task:** certifiedautocollision.com domain setup
+- **Progress:** 99%
+- **Blockers:** certifiedautocollision.com needs DWD setup in Google Admin Console
 
 ## Last Session
 - **Date:** 2026-01-08
@@ -79,8 +79,8 @@
 - [x] Attachments filtered and recorded (6,591 attachments: 4,491 PDFs, 773 JPEGs, 604 PNGs)
 - [x] Timeline events created (14,893 events: 9,929 received, 4,964 sent)
 - [x] Attachments downloaded to S3 (6,591 files, 2.2 GiB)
-- [ ] History-based incremental sync
-- [ ] Gap handling (historyId too old)
+- [x] History-based incremental sync (uses Gmail History API)
+- [x] Gap handling (marks needsFullResync when historyId too old)
 - [ ] certifiedautocollision.com domain (needs DWD setup)
 
 ### Phase 5: Spireon GPS
@@ -368,7 +368,8 @@ Phase 4 Gmail Mirror is 95% complete.
 **Test Scripts:**
 - `npx tsx packages/integrations/src/gmail/run-sync.ts` - Full sync
 - `npx tsx packages/integrations/src/gmail/sync-messages.ts` - Message-only sync
-- `npx tsx packages/integrations/src/gmail/download-attachments.ts` - S3 download
+- `npx tsx packages/integrations/src/gmail/sync-incremental.ts` - Incremental sync (history-based)
+- `S3_REGION=us-east-2 S3_BUCKET=mrst-files npx tsx packages/integrations/src/gmail/download-attachments.ts` - S3 download
 - `npx tsx packages/integrations/src/gmail/test-direct.ts` - Test connection
 
 TypeScript strictness: Some TS errors in Monday.com sync code due to noUncheckedIndexedAccess.
