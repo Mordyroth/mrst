@@ -4,23 +4,22 @@
 
 ## Current Status
 - **Phase:** 4 - Gmail Mirror
-- **Task:** Domain-wide delegation configuration
-- **Progress:** 40%
-- **Blockers:** Service account needs domain-wide delegation setup in Google Admin Console
+- **Task:** Timeline events from emails
+- **Progress:** 90%
+- **Blockers:** None
 
 ## Last Session
 - **Date:** 2026-01-08
-- **Duration:** ~8 hours
-- **Completed:** Phase 3 complete, Gmail client/sync/schema created
-- **Stopped at:** Waiting for Google Workspace domain-wide delegation configuration
+- **Duration:** ~10 hours
+- **Completed:** Gmail sync working - 14,893 messages, 6,591 attachments synced
+- **Stopped at:** Timeline event generation from emails pending
 
 ## Next Steps (Ordered)
-1. Configure domain-wide delegation in Google Workspace Admin
-2. Test Gmail client with actual admin email
-3. Sync labels and threads
-4. Sync messages and attachments (filter junk attachments)
-5. Create history-based incremental sync
-6. Create timeline events from emails
+1. Create timeline events from Gmail messages
+2. Download attachment files to S3
+3. Create history-based incremental sync
+4. Add certifiedautocollision.com domain (needs DWD setup)
+5. Move to Phase 5: Spireon GPS
 
 ## Phase Checklist
 
@@ -74,14 +73,16 @@
 - [x] Gmail client with service account auth
 - [x] Gmail sync service (labels, threads, messages, attachments)
 - [x] Junk attachment filtering logic
-- [ ] Domain-wide delegation configured (BLOCKED - Google Admin setup needed)
-- [ ] Labels synced
-- [ ] Threads synced (all mailboxes discovered via Admin SDK)
-- [ ] Messages synced
-- [ ] Attachments downloaded (with junk filtering)
+- [x] Domain-wide delegation working (travelautorental.com)
+- [x] Labels synced (16 labels)
+- [x] Threads synced (9,039 threads)
+- [x] Messages synced (14,893 messages)
+- [x] Attachments filtered and recorded (6,591 attachments: 4,491 PDFs, 773 JPEGs, 604 PNGs)
+- [ ] Attachments downloaded to S3
 - [ ] History-based incremental sync
 - [ ] Gap handling (historyId too old)
 - [ ] Timeline events created
+- [ ] certifiedautocollision.com domain (needs DWD setup)
 
 ### Phase 5: Spireon GPS
 - [ ] OAuth token flow
@@ -143,11 +144,11 @@
 |-------------|--------|--------|----------|--------|----------|
 | Monday.com  | ✅ | ✅ | ✅ | ✅ | ✅ |
 | HQ Rental   | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Gmail       | ✅ | ✅ | ⏳ | ⏳ | ❌ |
+| Gmail       | ✅ | ✅ | ✅ | ✅ | ⏳ |
 | Spireon     | ❌ | ✅ | ❌ | ❌ | ❌ |
 | WhatsApp    | ❌ | ✅ | ❌ | ❌ | ❌ |
 
-⏳ = Waiting for Google Workspace domain-wide delegation configuration
+⏳ = Timeline events pending
 
 ## Files Created (Phase 0)
 
@@ -338,30 +339,32 @@ Timeline Events Generated:
 - index.ts (Module exports)
 
 ## Notes for Next Session
-Phase 4 Gmail Mirror is IN PROGRESS (40% complete).
+Phase 4 Gmail Mirror is 90% complete.
 
-**BLOCKER:** Google Workspace domain-wide delegation needs to be configured:
-1. Go to Google Workspace Admin (admin.google.com)
-2. Security → API controls → Domain-wide delegation
-3. Add the service account client ID with scopes:
-   - `https://www.googleapis.com/auth/gmail.readonly`
-   - `https://www.googleapis.com/auth/gmail.metadata`
-   - `https://www.googleapis.com/auth/admin.directory.user.readonly`
-4. Use a valid super admin email (not admin@travelautorental.com - that failed)
+**Gmail Sync Results (info@travelautorental.com):**
+- 9,039 threads
+- 14,893 messages
+- 6,591 attachments (with junk filtering)
+  - 4,491 PDFs (1.7 GB)
+  - 773 JPEGs (321 MB)
+  - 604 PNGs (35 MB)
 
-Service account: `travelauto-email-service@travelauto-email-integration.iam.gserviceaccount.com`
+**Remaining for Phase 4:**
+1. Create timeline events from Gmail messages
+2. Download attachment files to S3
+3. Implement history-based incremental sync
+4. Set up certifiedautocollision.com domain (needs DWD in Google Admin)
 
-Code completed:
-- Gmail client with service account authentication (domain-wide delegation)
-- Admin SDK integration to discover ALL mailboxes across domains
-- Full sync for labels, threads, messages
-- Attachment filtering (keeps PDFs/docs/real content, filters junk icons/pixels)
-- Database schema (5 tables: accounts, labels, threads, messages, attachments)
+**Domain-Wide Delegation Notes:**
+- Service account: `travelauto-email-service@travelauto-email-integration.iam.gserviceaccount.com`
+- Working domain: travelautorental.com (admin: info@travelautorental.com)
+- Pending domain: certifiedautocollision.com (needs DWD setup with claims@)
+- Only `gmail.readonly` scope is authorized (not admin.directory)
 
-Timeline summary (Phase 3):
-- 3,762 total timeline events (512 Monday, 3,250 HQ)
-- 16,762 event links connecting to core entities
-- Timeline UI with filtering, collapse grouping, and pagination
+**Test Scripts:**
+- `npx tsx packages/integrations/src/gmail/run-sync.ts` - Full sync
+- `npx tsx packages/integrations/src/gmail/sync-messages.ts` - Message-only sync
+- `npx tsx packages/integrations/src/gmail/test-direct.ts` - Test connection
 
 TypeScript strictness: Some TS errors in Monday.com sync code due to noUncheckedIndexedAccess.
 Gmail code uses proper null checks and type assertions.

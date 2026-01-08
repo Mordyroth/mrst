@@ -16,8 +16,11 @@ import type { GmailSyncContext } from './types'
 
 const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://mrst:mrst_dev_2025@localhost:5432/mrst'
 
-// Admin email for domain-wide delegation (must be a super admin)
-const ADMIN_EMAIL = process.env.GMAIL_ADMIN_EMAIL || 'admin@travelautorental.com'
+// Admin emails for domain-wide delegation (must be a super admin per domain)
+const DOMAIN_ADMINS: Record<string, string> = {
+  'travelautorental.com': 'info@travelautorental.com',
+  'certifiedautocollision.com': 'claims@certifiedautocollision.com',
+}
 
 async function main() {
   console.log('=== Gmail Sync Test ===\n')
@@ -73,11 +76,13 @@ async function main() {
 
   // Discover mailboxes
   console.log('\n--- Discovering Mailboxes ---')
-  console.log(`Admin email: ${ADMIN_EMAIL}`)
-  console.log(`Domains: ${DOMAINS_TO_SYNC.join(', ')}`)
+  console.log(`Domain admins:`)
+  for (const [domain, admin] of Object.entries(DOMAIN_ADMINS)) {
+    console.log(`  ${domain}: ${admin}`)
+  }
 
   try {
-    const mailboxes = await discoverAllMailboxes(ADMIN_EMAIL, SERVICE_ACCOUNT_PATH, DOMAINS_TO_SYNC)
+    const mailboxes = await discoverAllMailboxes(DOMAIN_ADMINS, SERVICE_ACCOUNT_PATH, DOMAINS_TO_SYNC)
 
     let totalUsers = 0
     for (const { domain, emails } of mailboxes) {
@@ -135,7 +140,7 @@ async function main() {
 
     // If Admin SDK fails, try a direct test with a known email
     console.log('\n--- Attempting direct sync test ---')
-    const testEmail = 'rentals@travelautorental.com'
+    const testEmail = 'info@travelautorental.com'
     console.log(`Testing with: ${testEmail}`)
 
     try {

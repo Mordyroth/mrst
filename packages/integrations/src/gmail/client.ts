@@ -49,13 +49,11 @@ export async function createGmailClient(config: GmailClientConfig): Promise<Gmai
   const credentials = loadServiceAccountCredentials(config.serviceAccountPath || SERVICE_ACCOUNT_PATH)
 
   // Create JWT client with domain-wide delegation using google.auth.JWT
+  // Only use gmail.readonly scope (matching PHP implementation)
   const auth = new google.auth.JWT({
     email: credentials.client_email,
     key: credentials.private_key,
-    scopes: [
-      'https://www.googleapis.com/auth/gmail.readonly',
-      'https://www.googleapis.com/auth/gmail.metadata',
-    ],
+    scopes: ['https://www.googleapis.com/auth/gmail.readonly'],
     subject: config.userEmail, // Impersonate this user
   })
 
@@ -127,17 +125,25 @@ export async function discoverDomainUsers(
 
 /**
  * Discover all mailboxes across all configured domains
+ * Uses per-domain admin emails for impersonation
  */
 export async function discoverAllMailboxes(
-  adminEmail: string,
+  domainAdmins: Record<string, string>,
   serviceAccountPath: string = SERVICE_ACCOUNT_PATH,
   domains: string[] = DOMAINS_TO_SYNC
 ): Promise<{ domain: string; emails: string[] }[]> {
-  const adminClient = await createAdminClient(serviceAccountPath, adminEmail)
   const results: { domain: string; emails: string[] }[] = []
 
   for (const domain of domains) {
+    const adminEmail = domainAdmins[domain]
+    if (!adminEmail) {
+      console.error(`No admin email configured for domain: ${domain}`)
+      results.push({ domain, emails: [] })
+      continue
+    }
+
     try {
+      const adminClient = await createAdminClient(serviceAccountPath, adminEmail)
       const emails = await discoverDomainUsers(adminClient, domain)
       results.push({ domain, emails })
       console.log(`Discovered ${emails.length} users in ${domain}`)
