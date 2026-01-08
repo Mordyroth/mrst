@@ -144,6 +144,10 @@ const authRouter = t.router({
         expiresAt,
       }).returning()
 
+      if (!session) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to create session' })
+      }
+
       // Update last login
       await ctx.db.update(users)
         .set({ lastLoginAt: new Date() })
@@ -388,6 +392,10 @@ const usersRouter = t.router({
         role: input.role,
       }).returning()
 
+      if (!user) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to create user' })
+      }
+
       return {
         id: user.id,
         email: user.email,
@@ -409,8 +417,8 @@ const usersRouter = t.router({
     .mutation(async ({ ctx, input }) => {
       const { id, ...updates } = input
 
-      // Can't modify yourself to non-admin
-      if (id === ctx.user!.id && updates.role && updates.role !== 'admin' && updates.role !== 'owner') {
+      // Can't modify yourself to non-admin (owner can't be set via this API)
+      if (id === ctx.user!.id && updates.role && updates.role !== 'admin') {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Cannot remove your own admin access' })
       }
 
@@ -427,7 +435,7 @@ const usersRouter = t.router({
 })
 
 // Helper function to collapse timeline events by group key
-interface TimelineEventRow {
+export interface TimelineEventRow {
   id: string
   eventType: string
   source: string
@@ -441,11 +449,11 @@ interface TimelineEventRow {
   actorEmail?: string | null
   occurredAt: Date
   isInternal?: boolean | null
-  isPinned: boolean
+  isPinned: boolean | null
   collapseGroupKey?: string | null
 }
 
-interface CollapsedEvent extends TimelineEventRow {
+export interface CollapsedEvent extends TimelineEventRow {
   collapsedCount: number
   collapsedIds: string[]
 }

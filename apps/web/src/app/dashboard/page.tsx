@@ -1,3 +1,7 @@
+'use client'
+
+import { SuggestionsWidget } from '@/components/ai/Suggestions'
+
 export default function DashboardPage() {
   return (
     <main className="min-h-screen bg-background">
@@ -16,6 +20,12 @@ export default function DashboardPage() {
                   className="text-sm text-muted-foreground hover:text-foreground"
                 >
                   Timeline
+                </a>
+                <a
+                  href="/suggestions"
+                  className="text-sm text-muted-foreground hover:text-foreground"
+                >
+                  Suggestions
                 </a>
               </nav>
             </div>
@@ -49,6 +59,11 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* AI Suggestions - Full width */}
+        <div className="mt-8">
+          <SuggestionsWidget />
+        </div>
+
         <div className="mt-8 grid gap-6 lg:grid-cols-2">
           {/* Integration status */}
           <div className="rounded-lg border bg-card p-6">
@@ -57,8 +72,8 @@ export default function DashboardPage() {
               {[
                 { name: 'Monday.com', status: 'Synced', synced: true },
                 { name: 'HQ Rental', status: 'Synced', synced: true },
-                { name: 'Gmail', status: 'Not configured', synced: false },
-                { name: 'Spireon GPS', status: 'Not configured', synced: false },
+                { name: 'Gmail', status: 'Synced', synced: true },
+                { name: 'Spireon GPS', status: 'Synced', synced: true },
                 { name: 'WhatsApp', status: 'Not configured', synced: false },
               ].map((integration) => (
                 <div key={integration.name} className="flex items-center justify-between">
@@ -88,7 +103,7 @@ export default function DashboardPage() {
             </div>
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                3,762 events from Monday.com and HQ Rental. Visit the{' '}
+                18,655 events from all integrations. Visit the{' '}
                 <a href="/timeline" className="text-primary hover:underline">
                   Timeline
                 </a>{' '}
@@ -97,12 +112,16 @@ export default function DashboardPage() {
               <div className="pt-2 border-t">
                 <div className="text-xs text-muted-foreground space-y-1">
                   <div className="flex justify-between">
-                    <span>Monday.com activity</span>
-                    <span>727 events</span>
+                    <span>Gmail messages</span>
+                    <span>14,893 events</span>
                   </div>
                   <div className="flex justify-between">
                     <span>HQ reservations</span>
                     <span>3,035 events</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Monday.com activity</span>
+                    <span>727 events</span>
                   </div>
                 </div>
               </div>

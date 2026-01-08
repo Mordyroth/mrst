@@ -36,7 +36,7 @@ app.get('/health', (c) => {
 // tRPC endpoint
 app.use('/trpc/*', trpcServer({
   router: appRouter,
-  createContext: ({ req }) => createContext({ req, db }),
+  createContext: ({ req }) => createContext({ req, db }) as unknown as Record<string, unknown>,
 }))
 
 // API routes (REST endpoints for webhooks, etc.)
@@ -97,3 +97,4 @@ serve({
 })
 
 export type AppRouter = typeof appRouter
+export type { TimelineEventRow, CollapsedEvent } from './trpc/router'
