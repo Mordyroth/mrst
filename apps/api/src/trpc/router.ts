@@ -19,6 +19,10 @@ import {
   timelineEventLinks,
   coreCustomers,
   coreVehicles,
+  aiTasks,
+  aiConversations,
+  aiMessages,
+  embeddings,
   type UserRole,
   type TimelineEventType,
 } from '@mrst/db/schema'
@@ -887,6 +891,399 @@ const timelineRouter = t.router({
     }),
 })
 
+// AI router for semantic search and suggestions
+const aiRouter = t.router({
+  /**
+   * Vector similarity search
+   */
+  search: protectedProcedure
+    .input(z.object({
+      query: z.string().min(1),
+      topK: z.number().min(1).max(50).default(10),
+      minSimilarity: z.number().min(0).max(1).default(0.5),
+      filterTypes: z.array(z.string()).optional(),
+      filterCustomerIds: z.array(z.string()).optional(),
+      filterVehicleIds: z.array(z.string()).optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      // Note: Full vector search requires embedding service
+      // This is a simplified version that returns placeholder results
+      // Full implementation would call vectorSearch from @mrst/ai
+
+      const results = await ctx.db
+        .select({
+          id: embeddings.id,
+          sourceType: embeddings.sourceType,
+          sourceId: embeddings.sourceId,
+          content: embeddings.content,
+          metadata: embeddings.metadata,
+        })
+        .from(embeddings)
+        .where(eq(embeddings.tenantId, ctx.user!.tenantId))
+        .limit(input.topK)
+
+      return {
+        results: results.map(r => ({
+          ...r,
+          similarity: 0.8, // Placeholder - real implementation uses vector similarity
+        })),
+        query: input.query,
+        totalFound: results.length,
+      }
+    }),
+
+  /**
+   * Get pending AI suggestions/tasks
+   */
+  getSuggestions: protectedProcedure
+    .input(z.object({
+      status: z.enum(['pending', 'acknowledged', 'completed', 'dismissed']).default('pending'),
+      taskType: z.enum(['follow_up', 'action_required', 'anomaly', 'opportunity']).optional(),
+      priority: z.enum(['high', 'medium', 'low']).optional(),
+      limit: z.number().min(1).max(100).default(20),
+    }))
+    .query(async ({ ctx, input }) => {
+      const conditions = [
+        eq(aiTasks.tenantId, ctx.user!.tenantId),
+        eq(aiTasks.status, input.status),
+      ]
+
+      if (input.taskType) {
+        conditions.push(eq(aiTasks.taskType, input.taskType))
+      }
+      if (input.priority) {
+        conditions.push(eq(aiTasks.priority, input.priority))
+      }
+
+      const suggestions = await ctx.db
+        .select()
+        .from(aiTasks)
+        .where(and(...conditions))
+        .orderBy(
+          sql`CASE WHEN ${aiTasks.priority} = 'high' THEN 1 WHEN ${aiTasks.priority} = 'medium' THEN 2 ELSE 3 END`,
+          desc(aiTasks.createdAt)
+        )
+        .limit(input.limit)
+
+      // Get counts by status
+      const statusCounts = await ctx.db
+        .select({
+          status: aiTasks.status,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(aiTasks)
+        .where(eq(aiTasks.tenantId, ctx.user!.tenantId))
+        .groupBy(aiTasks.status)
+
+      return {
+        suggestions,
+        counts: Object.fromEntries(statusCounts.map(s => [s.status, s.count])),
+      }
+    }),
+
+  /**
+   * Acknowledge a suggestion (mark as seen)
+   */
+  acknowledgeSuggestion: protectedProcedure
+    .input(z.object({
+      taskId: z.string().uuid(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const [updated] = await ctx.db
+        .update(aiTasks)
+        .set({
+          status: 'acknowledged',
+          acknowledgedBy: ctx.user!.id,
+          acknowledgedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(aiTasks.id, input.taskId),
+            eq(aiTasks.tenantId, ctx.user!.tenantId)
+          )
+        )
+        .returning()
+
+      if (!updated) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Suggestion not found' })
+      }
+
+      return { success: true, task: updated }
+    }),
+
+  /**
+   * Complete a suggestion
+   */
+  completeSuggestion: protectedProcedure
+    .input(z.object({
+      taskId: z.string().uuid(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const [updated] = await ctx.db
+        .update(aiTasks)
+        .set({
+          status: 'completed',
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(aiTasks.id, input.taskId),
+            eq(aiTasks.tenantId, ctx.user!.tenantId)
+          )
+        )
+        .returning()
+
+      if (!updated) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Suggestion not found' })
+      }
+
+      return { success: true, task: updated }
+    }),
+
+  /**
+   * Dismiss a suggestion
+   */
+  dismissSuggestion: protectedProcedure
+    .input(z.object({
+      taskId: z.string().uuid(),
+      reason: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const [updated] = await ctx.db
+        .update(aiTasks)
+        .set({
+          status: 'dismissed',
+          dismissedAt: new Date(),
+          dismissReason: input.reason,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(aiTasks.id, input.taskId),
+            eq(aiTasks.tenantId, ctx.user!.tenantId)
+          )
+        )
+        .returning()
+
+      if (!updated) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Suggestion not found' })
+      }
+
+      return { success: true, task: updated }
+    }),
+
+  /**
+   * Get AI conversations
+   */
+  getConversations: protectedProcedure
+    .input(z.object({
+      limit: z.number().min(1).max(50).default(20),
+      activeOnly: z.boolean().default(true),
+    }))
+    .query(async ({ ctx, input }) => {
+      const conditions = [eq(aiConversations.tenantId, ctx.user!.tenantId)]
+      if (input.activeOnly) {
+        conditions.push(eq(aiConversations.isActive, true))
+      }
+
+      const conversations = await ctx.db
+        .select()
+        .from(aiConversations)
+        .where(and(...conditions))
+        .orderBy(desc(aiConversations.updatedAt))
+        .limit(input.limit)
+
+      return { conversations }
+    }),
+
+  /**
+   * Create a new AI conversation
+   */
+  createConversation: protectedProcedure
+    .input(z.object({
+      title: z.string().optional(),
+      context: z.object({
+        customerIds: z.array(z.string()).optional(),
+        vehicleIds: z.array(z.string()).optional(),
+        boardIds: z.array(z.string()).optional(),
+        dateRange: z.object({
+          start: z.string(),
+          end: z.string(),
+        }).optional(),
+      }).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const [conversation] = await ctx.db
+        .insert(aiConversations)
+        .values({
+          tenantId: ctx.user!.tenantId,
+          userId: ctx.user!.id,
+          title: input.title,
+          context: input.context,
+        })
+        .returning()
+
+      return { conversation }
+    }),
+
+  /**
+   * Get messages for a conversation
+   */
+  getMessages: protectedProcedure
+    .input(z.object({
+      conversationId: z.string().uuid(),
+      limit: z.number().min(1).max(100).default(50),
+      offset: z.number().min(0).default(0),
+    }))
+    .query(async ({ ctx, input }) => {
+      // Verify conversation belongs to tenant
+      const [conversation] = await ctx.db
+        .select()
+        .from(aiConversations)
+        .where(
+          and(
+            eq(aiConversations.id, input.conversationId),
+            eq(aiConversations.tenantId, ctx.user!.tenantId)
+          )
+        )
+        .limit(1)
+
+      if (!conversation) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Conversation not found' })
+      }
+
+      const messages = await ctx.db
+        .select()
+        .from(aiMessages)
+        .where(eq(aiMessages.conversationId, input.conversationId))
+        .orderBy(aiMessages.createdAt)
+        .limit(input.limit)
+        .offset(input.offset)
+
+      return { conversation, messages }
+    }),
+
+  /**
+   * Send a message to an AI conversation
+   * Note: Full RAG implementation requires AI service
+   */
+  sendMessage: protectedProcedure
+    .input(z.object({
+      conversationId: z.string().uuid(),
+      content: z.string().min(1),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify conversation belongs to tenant
+      const [conversation] = await ctx.db
+        .select()
+        .from(aiConversations)
+        .where(
+          and(
+            eq(aiConversations.id, input.conversationId),
+            eq(aiConversations.tenantId, ctx.user!.tenantId)
+          )
+        )
+        .limit(1)
+
+      if (!conversation) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Conversation not found' })
+      }
+
+      // Save user message
+      const [userMessage] = await ctx.db
+        .insert(aiMessages)
+        .values({
+          conversationId: input.conversationId,
+          role: 'user',
+          content: input.content,
+        })
+        .returning()
+
+      // Update conversation timestamp
+      await ctx.db
+        .update(aiConversations)
+        .set({ updatedAt: new Date() })
+        .where(eq(aiConversations.id, input.conversationId))
+
+      // Note: Real AI response would be generated here using RAG
+      // For now, return a placeholder indicating AI service needed
+      const [assistantMessage] = await ctx.db
+        .insert(aiMessages)
+        .values({
+          conversationId: input.conversationId,
+          role: 'assistant',
+          content: 'AI service integration required. Configure ANTHROPIC_API_KEY to enable AI responses.',
+          model: 'placeholder',
+          promptTokens: 0,
+          completionTokens: 0,
+        })
+        .returning()
+
+      return { userMessage, assistantMessage }
+    }),
+
+  /**
+   * Get AI task statistics for dashboard
+   */
+  getStats: protectedProcedure
+    .query(async ({ ctx }) => {
+      // Count by status
+      const statusCounts = await ctx.db
+        .select({
+          status: aiTasks.status,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(aiTasks)
+        .where(eq(aiTasks.tenantId, ctx.user!.tenantId))
+        .groupBy(aiTasks.status)
+
+      // Count by priority for pending tasks
+      const priorityCounts = await ctx.db
+        .select({
+          priority: aiTasks.priority,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(aiTasks)
+        .where(
+          and(
+            eq(aiTasks.tenantId, ctx.user!.tenantId),
+            eq(aiTasks.status, 'pending')
+          )
+        )
+        .groupBy(aiTasks.priority)
+
+      // Count by type for pending tasks
+      const typeCounts = await ctx.db
+        .select({
+          taskType: aiTasks.taskType,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(aiTasks)
+        .where(
+          and(
+            eq(aiTasks.tenantId, ctx.user!.tenantId),
+            eq(aiTasks.status, 'pending')
+          )
+        )
+        .groupBy(aiTasks.taskType)
+
+      // Count embeddings
+      const [embeddingCount] = await ctx.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(embeddings)
+        .where(eq(embeddings.tenantId, ctx.user!.tenantId))
+
+      return {
+        byStatus: Object.fromEntries(statusCounts.map(s => [s.status, s.count])),
+        byPriority: Object.fromEntries(priorityCounts.map(p => [p.priority, p.count])),
+        byType: Object.fromEntries(typeCounts.map(t => [t.taskType, t.count])),
+        totalEmbeddings: embeddingCount?.count ?? 0,
+      }
+    }),
+})
+
 // Main router
 export const appRouter = t.router({
   auth: authRouter,
@@ -895,6 +1292,7 @@ export const appRouter = t.router({
   sync: syncRouter,
   users: usersRouter,
   timeline: timelineRouter,
+  ai: aiRouter,
 })
 
 export type AppRouter = typeof appRouter

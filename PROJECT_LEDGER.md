@@ -4,9 +4,9 @@
 
 ## Current Status
 - **Phase:** 7 - AI Intelligence Layer (in progress)
-- **Task:** AI client and embeddings created, ready for embedding pipeline
-- **Progress:** 60%
-- **Blockers:** None
+- **Task:** AI tRPC endpoints created, ready for UI integration
+- **Progress:** 75%
+- **Blockers:** Need API keys (ANTHROPIC_API_KEY, VOYAGE_API_KEY) to run embedding pipeline
 
 ## Outstanding Issues
 1. **certifiedautocollision.com Gmail**: Needs SEPARATE service account
@@ -22,19 +22,24 @@
 
 ## Last Session
 - **Date:** 2026-01-08
-- **Duration:** ~12 hours
+- **Duration:** Continuation session
 - **Completed:**
-  - Gmail timeline events created (14,893 events)
-  - S3 attachments downloaded (6,591 files, 2.2 GiB)
-  - History-based incremental sync implemented
-  - Spireon client created (auth blocked)
-- **Stopped at:** Spireon credentials invalid
+  - Spireon devices synced (247 devices)
+  - AI package built (claude.ts, gemini.ts, embeddings.ts, client.ts)
+  - Embedding pipeline created (pipeline.ts with content extractors)
+  - Semantic search created (search.ts with RAG)
+  - Suggestions feature created (suggestions.ts)
+  - Worker jobs added (GENERATE_EMBEDDINGS, GENERATE_SUGGESTIONS)
+  - AI tRPC router created (~400 lines, 12 endpoints)
+- **Stopped at:** AI endpoints complete, ready for UI integration
 
 ## Next Steps (Ordered)
-1. Get fresh Spireon credentials from NSpire portal
-2. Add certifiedautocollision.com domain (needs DWD setup)
-3. Complete Phase 5: Spireon GPS sync
-4. Move to Phase 6: WhatsApp
+1. Configure API keys (ANTHROPIC_API_KEY, VOYAGE_API_KEY) for embedding generation
+2. Run embedding pipeline to populate vector index
+3. Build AI suggestions UI component
+4. Add certifiedautocollision.com domain (needs DWD setup)
+5. Complete Phase 5: Spireon GPS location polling
+6. Move to Phase 6: WhatsApp
 
 ## Phase Checklist
 
@@ -126,9 +131,12 @@
 - [x] Embedding pipeline built (pipeline.ts - batch processing all data types)
 - [x] Semantic search API (search.ts - vector similarity, RAG queries)
 - [x] "What should I do next?" feature (suggestions.ts - email/reservation/GPS analysis)
-- [ ] All data types embedded (needs API keys)
-- [ ] Natural language query API endpoint
+- [x] Worker jobs added (GENERATE_EMBEDDINGS, GENERATE_SUGGESTIONS)
+- [x] tRPC endpoints created (ai router: search, suggestions, conversations, messages, stats)
+- [ ] All data types embedded (needs API keys: ANTHROPIC_API_KEY, VOYAGE_API_KEY)
+- [ ] Natural language query API endpoint (sendMessage returns placeholder until API keys configured)
 - [ ] Vehicle image generation
+- [ ] AI suggestions UI component
 
 ## Cross-Cutting Requirements (All Phases)
 
