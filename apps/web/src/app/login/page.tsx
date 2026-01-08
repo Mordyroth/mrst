@@ -14,7 +14,7 @@ export default function LoginPage() {
       localStorage.setItem('auth_token', data.token)
       localStorage.setItem('user', JSON.stringify(data.user))
       // Redirect to dashboard
-      window.location.href = '/dashboard'
+      window.location.href = '/mrst/dashboard'
     },
     onError: (err) => {
       setError(err.message || 'Invalid credentials')

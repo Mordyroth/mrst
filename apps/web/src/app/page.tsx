@@ -8,13 +8,13 @@ export default function HomePage() {
         </p>
         <div className="mt-8 flex gap-4 justify-center">
           <a
-            href="/login"
+            href="/mrst/login"
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
           >
             Sign In
           </a>
           <a
-            href="/dashboard"
+            href="/mrst/dashboard"
             className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
           >
             Dashboard

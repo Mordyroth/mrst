@@ -137,17 +137,17 @@ export default function TimelinePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4">
-              <a href="/dashboard" className="text-lg font-bold">
+              <a href="/mrst/dashboard" className="text-lg font-bold">
                 MRST
               </a>
               <nav className="flex gap-4">
                 <a
-                  href="/dashboard"
+                  href="/mrst/dashboard"
                   className="text-sm text-muted-foreground hover:text-foreground"
                 >
                   Dashboard
                 </a>
-                <a href="/timeline" className="text-sm font-medium">
+                <a href="/mrst/timeline" className="text-sm font-medium">
                   Timeline
                 </a>
               </nav>

@@ -33,18 +33,18 @@ export default function SuggestionsPage() {
               <span className="text-lg font-bold">MRST</span>
               <nav className="flex gap-4">
                 <a
-                  href="/dashboard"
+                  href="/mrst/dashboard"
                   className="text-sm text-muted-foreground hover:text-foreground"
                 >
                   Dashboard
                 </a>
                 <a
-                  href="/timeline"
+                  href="/mrst/timeline"
                   className="text-sm text-muted-foreground hover:text-foreground"
                 >
                   Timeline
                 </a>
-                <a href="/suggestions" className="text-sm font-medium">
+                <a href="/mrst/suggestions" className="text-sm font-medium">
                   Suggestions
                 </a>
               </nav>

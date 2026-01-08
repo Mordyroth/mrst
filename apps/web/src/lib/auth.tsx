@@ -60,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('user')
     setToken(null)
     setUser(null)
-    window.location.href = '/login'
+    window.location.href = '/mrst/login'
   }
 
   return (
@@ -95,7 +95,7 @@ export function useRequireAuth() {
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      window.location.href = '/login'
+      window.location.href = '/mrst/login'
     }
   }, [isAuthenticated, isLoading])
 

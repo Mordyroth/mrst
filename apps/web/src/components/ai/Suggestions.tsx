@@ -382,7 +382,7 @@ export function SuggestionsWidget() {
     <div className="rounded-lg border bg-card p-6">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold">AI Suggestions</h2>
-        <a href="/suggestions" className="text-sm text-primary hover:underline">
+        <a href="/mrst/suggestions" className="text-sm text-primary hover:underline">
           View all
         </a>
       </div>

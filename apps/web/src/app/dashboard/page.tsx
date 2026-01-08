@@ -32,17 +32,17 @@ export default function DashboardPage() {
             <div className="flex items-center gap-4">
               <span className="text-lg font-bold">MRST</span>
               <nav className="flex gap-4">
-                <a href="/dashboard" className="text-sm font-medium">
+                <a href="/mrst/dashboard" className="text-sm font-medium">
                   Dashboard
                 </a>
                 <a
-                  href="/timeline"
+                  href="/mrst/timeline"
                   className="text-sm text-muted-foreground hover:text-foreground"
                 >
                   Timeline
                 </a>
                 <a
-                  href="/suggestions"
+                  href="/mrst/suggestions"
                   className="text-sm text-muted-foreground hover:text-foreground"
                 >
                   Suggestions
@@ -139,7 +139,7 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold">Recent Activity</h2>
               <a
-                href="/timeline"
+                href="/mrst/timeline"
                 className="text-sm text-primary hover:underline"
               >
                 View all
@@ -148,7 +148,7 @@ export default function DashboardPage() {
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
                 18,655 events from all integrations. Visit the{' '}
-                <a href="/timeline" className="text-primary hover:underline">
+                <a href="/mrst/timeline" className="text-primary hover:underline">
                   Timeline
                 </a>{' '}
                 to view all activity.
