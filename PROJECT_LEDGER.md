@@ -4,8 +4,8 @@
 
 ## Current Status
 - **Phase:** 7 - AI Intelligence Layer (in progress)
-- **Task:** AI tRPC endpoints created, ready for UI integration
-- **Progress:** 75%
+- **Task:** AI UI components created, ready for API key configuration
+- **Progress:** 85%
 - **Blockers:** Need API keys (ANTHROPIC_API_KEY, VOYAGE_API_KEY) to run embedding pipeline
 
 ## Outstanding Issues
@@ -31,7 +31,10 @@
   - Suggestions feature created (suggestions.ts)
   - Worker jobs added (GENERATE_EMBEDDINGS, GENERATE_SUGGESTIONS)
   - AI tRPC router created (~400 lines, 12 endpoints)
-- **Stopped at:** AI endpoints complete, ready for UI integration
+  - AI suggestions UI component (SuggestionsList, SuggestionsWidget)
+  - tRPC client infrastructure (trpc.ts, providers.tsx)
+  - Fixed pre-existing TypeScript errors in API router
+- **Stopped at:** AI UI complete, ready for API keys and embedding generation
 
 ## Next Steps (Ordered)
 1. Configure API keys (ANTHROPIC_API_KEY, VOYAGE_API_KEY) for embedding generation
@@ -133,10 +136,11 @@
 - [x] "What should I do next?" feature (suggestions.ts - email/reservation/GPS analysis)
 - [x] Worker jobs added (GENERATE_EMBEDDINGS, GENERATE_SUGGESTIONS)
 - [x] tRPC endpoints created (ai router: search, suggestions, conversations, messages, stats)
+- [x] AI suggestions UI component (SuggestionsList, SuggestionsWidget, /suggestions page)
+- [x] tRPC client infrastructure (trpc.ts, providers.tsx)
 - [ ] All data types embedded (needs API keys: ANTHROPIC_API_KEY, VOYAGE_API_KEY)
 - [ ] Natural language query API endpoint (sendMessage returns placeholder until API keys configured)
 - [ ] Vehicle image generation
-- [ ] AI suggestions UI component
 
 ## Cross-Cutting Requirements (All Phases)
 
