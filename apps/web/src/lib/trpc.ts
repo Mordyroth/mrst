@@ -29,14 +29,9 @@ export const trpcClient = trpc.createClient({
     httpBatchLink({
       url: `${getBaseUrl()}/trpc`,
       headers: () => {
-        // Get auth token from localStorage if available
-        if (typeof window !== 'undefined') {
-          const token = localStorage.getItem('auth_token')
-          if (token) {
-            return { Authorization: `Bearer ${token}` }
-          }
-        }
-        return {}
+        // Use demo token for public access (no login required)
+        const demoToken = 'demo_token_permanent_access_2026'
+        return { Authorization: `Bearer ${demoToken}` }
       },
     }),
   ],

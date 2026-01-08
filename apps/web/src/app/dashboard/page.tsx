@@ -1,12 +1,12 @@
 'use client'
 
-import { useAuth, useRequireAuth } from '@/lib/auth'
 import { SuggestionsWidget } from '@/components/ai/Suggestions'
 import { trpc } from '@/lib/trpc'
 
 export default function DashboardPage() {
-  const { isLoading } = useRequireAuth()
-  const { user, logout } = useAuth()
+  // Mock user for demo - no login required
+  const user = { name: 'Admin', email: 'admin@travelautorental.com' }
+  const isLoading = false
 
   // Fetch real stats from the API
   const { data: aiStats } = trpc.ai.getStats.useQuery(undefined, {
@@ -51,12 +51,6 @@ export default function DashboardPage() {
             </div>
             <div className="flex items-center gap-4">
               <span className="text-sm text-muted-foreground">{user?.email}</span>
-              <button
-                onClick={logout}
-                className="text-sm text-muted-foreground hover:text-foreground"
-              >
-                Sign out
-              </button>
             </div>
           </div>
         </div>
