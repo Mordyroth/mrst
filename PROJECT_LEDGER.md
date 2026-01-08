@@ -4,9 +4,16 @@
 
 ## Current Status
 - **Phase:** 7 - AI Intelligence Layer (in progress)
-- **Task:** AI UI components created, ready for API key configuration
-- **Progress:** 85%
+- **Task:** Production deployment complete, AI pipeline ready for API keys
+- **Progress:** 90%
 - **Blockers:** Need API keys (ANTHROPIC_API_KEY, VOYAGE_API_KEY) to run embedding pipeline
+
+## Production Deployment ✅
+- **URL:** https://app.travelautorental.com/mrst/
+- **API:** https://app.travelautorental.com/api/
+- **Services:** PM2 managed (mrst-api, mrst-web)
+- **Login:** admin@travelautorental.com / admin123
+- **Config:** ecosystem.config.js, nginx-mrst.conf
 
 ## Outstanding Issues
 1. **certifiedautocollision.com Gmail**: Needs SEPARATE service account
