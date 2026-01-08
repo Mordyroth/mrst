@@ -28,6 +28,10 @@ import {
   mondayItemColumnValues,
   mondayColumns,
   mondayBoards,
+  hqReservations,
+  hqCustomers,
+  hqVehicles,
+  gmailMessages,
   type UserRole,
   type TimelineEventType,
 } from '@mrst/db/schema'
@@ -1478,6 +1482,141 @@ const vehiclesRouter = t.router({
   }),
 })
 
+// Dashboard router - aggregated stats for the dashboard
+const dashboardRouter = t.router({
+  // Get all dashboard stats in a single call
+  stats: publicProcedure.query(async ({ ctx }) => {
+    // Get fleet VINs from Monday board for vehicle matching
+    const fleetVins = await ctx.db
+      .select({ vin: sql<string>`UPPER(${mondayItemColumnValues.textValue})` })
+      .from(mondayItemColumnValues)
+      .innerJoin(mondayItems, eq(mondayItemColumnValues.itemId, mondayItems.id))
+      .innerJoin(mondayBoards, eq(mondayItems.boardId, mondayBoards.id))
+      .innerJoin(mondayColumns, eq(mondayItemColumnValues.columnId, mondayColumns.id))
+      .where(and(
+        eq(mondayBoards.externalId, FLEET_BOARD_EXTERNAL_ID),
+        eq(mondayColumns.title, 'VIN'),
+        sql`LENGTH(${mondayItemColumnValues.textValue}) = 17`
+      ))
+
+    const vinSet = new Set(fleetVins.map(v => v.vin?.toUpperCase()).filter(Boolean))
+
+    // Get Spireon devices and count matches
+    const spireonAll = await ctx.db
+      .select({
+        vehicleVin: spireonDevices.vehicleVin,
+        isOnline: spireonDevices.isOnline,
+        name: spireonDevices.name,
+      })
+      .from(spireonDevices)
+      .where(sql`${spireonDevices.name} NOT ILIKE '%inactive%'`)
+
+    const fleetDevices = spireonAll.filter(d => d.vehicleVin && vinSet.has(d.vehicleVin.toUpperCase()))
+
+    // HQ Reservations
+    const reservationStats = await ctx.db
+      .select({
+        status: hqReservations.status,
+        count: sql<number>`count(*)`,
+      })
+      .from(hqReservations)
+      .groupBy(hqReservations.status)
+
+    const reservationsByStatus: Record<string, number> = {}
+    for (const r of reservationStats) {
+      reservationsByStatus[r.status || 'unknown'] = Number(r.count)
+    }
+
+    // HQ Customers
+    const customerCount = await ctx.db
+      .select({ count: sql<number>`count(*)` })
+      .from(hqCustomers)
+
+    // Gmail Messages
+    const gmailCount = await ctx.db
+      .select({ count: sql<number>`count(*)` })
+      .from(gmailMessages)
+
+    // Monday Items
+    const mondayCount = await ctx.db
+      .select({ count: sql<number>`count(*)` })
+      .from(mondayItems)
+
+    // Timeline Events
+    const timelineCount = await ctx.db
+      .select({ count: sql<number>`count(*)` })
+      .from(timelineEvents)
+
+    // Timeline events by source (last 7 days)
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    const recentEventsBySource = await ctx.db
+      .select({
+        source: timelineEvents.source,
+        count: sql<number>`count(*)`,
+      })
+      .from(timelineEvents)
+      .where(gte(timelineEvents.occurredAt, weekAgo))
+      .groupBy(timelineEvents.source)
+
+    const eventsBySource: Record<string, number> = {}
+    for (const e of recentEventsBySource) {
+      eventsBySource[e.source] = Number(e.count)
+    }
+
+    // Integration last sync times
+    const integrations = await ctx.db
+      .select({
+        type: integrationAccounts.type,
+        name: integrationAccounts.name,
+        isActive: integrationAccounts.isActive,
+        lastSyncAt: integrationAccounts.lastSyncAt,
+      })
+      .from(integrationAccounts)
+      .where(eq(integrationAccounts.isActive, true))
+
+    return {
+      // Vehicle stats
+      fleetVehicles: fleetDevices.length,
+      activeVehicles: fleetDevices.filter(d => d.isOnline).length,
+      totalSpieonDevices: spireonAll.length,
+
+      // Rental stats
+      activeRentals: reservationsByStatus['rental'] || 0,
+      openReservations: reservationsByStatus['open'] || 0,
+      completedReservations: reservationsByStatus['completed'] || 0,
+      totalReservations: Object.values(reservationsByStatus).reduce((a, b) => a + b, 0),
+
+      // Customer stats
+      totalCustomers: Number(customerCount[0]?.count || 0),
+
+      // Integration stats
+      integrations: {
+        monday: {
+          itemCount: Number(mondayCount[0]?.count || 0),
+          lastSync: integrations.find(i => i.type === 'monday')?.lastSyncAt,
+        },
+        hq: {
+          reservationCount: Object.values(reservationsByStatus).reduce((a, b) => a + b, 0),
+          customerCount: Number(customerCount[0]?.count || 0),
+          lastSync: integrations.find(i => i.type === 'hq')?.lastSyncAt,
+        },
+        gmail: {
+          messageCount: Number(gmailCount[0]?.count || 0),
+          lastSync: integrations.find(i => i.type === 'gmail')?.lastSyncAt,
+        },
+        spireon: {
+          deviceCount: spireonAll.length,
+          lastSync: integrations.find(i => i.type === 'spireon')?.lastSyncAt,
+        },
+      },
+
+      // Timeline stats
+      totalTimelineEvents: Number(timelineCount[0]?.count || 0),
+      recentEventsBySource: eventsBySource,
+    }
+  }),
+})
+
 // Main router
 export const appRouter = t.router({
   auth: authRouter,
@@ -1488,6 +1627,7 @@ export const appRouter = t.router({
   timeline: timelineRouter,
   ai: aiRouter,
   vehicles: vehiclesRouter,
+  dashboard: dashboardRouter,
 })
 
 export type AppRouter = typeof appRouter
