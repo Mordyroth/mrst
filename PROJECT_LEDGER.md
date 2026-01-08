@@ -123,10 +123,11 @@
 - [x] HNSW vector index created
 - [x] Claude client with Gemini fallback (@mrst/ai package)
 - [x] Voyage/Google embeddings service
-- [ ] Embedding pipeline built
-- [ ] All data types embedded
-- [ ] Natural language query engine
-- [ ] "What should I do next?" endpoint
+- [x] Embedding pipeline built (pipeline.ts - batch processing all data types)
+- [x] Semantic search API (search.ts - vector similarity, RAG queries)
+- [x] "What should I do next?" feature (suggestions.ts - email/reservation/GPS analysis)
+- [ ] All data types embedded (needs API keys)
+- [ ] Natural language query API endpoint
 - [ ] Vehicle image generation
 
 ## Cross-Cutting Requirements (All Phases)

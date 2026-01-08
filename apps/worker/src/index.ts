@@ -42,6 +42,9 @@ export const JOB_TYPES = {
   MERGE_IDENTITY: 'identity:merge',
   // Timeline
   CREATE_TIMELINE_EVENT: 'timeline:create',
+  // AI
+  GENERATE_EMBEDDINGS: 'ai:embeddings',
+  GENERATE_SUGGESTIONS: 'ai:suggestions',
   // Maintenance
   CLEANUP_EXPIRED_SESSIONS: 'maintenance:cleanup_sessions',
 } as const
@@ -551,6 +554,103 @@ async function registerHandlers(boss: PgBoss, db: Database): Promise<void> {
       // Delete expired sessions
       // await db.delete(sessions).where(lt(sessions.expiresAt, new Date()))
       return { status: 'completed' }
+    }
+  })
+
+  // AI Embeddings generation
+  await boss.work<{ tenantId: string; sourceType?: string }>(JOB_TYPES.GENERATE_EMBEDDINGS, { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) {
+      console.log(`[Worker] Processing ${JOB_TYPES.GENERATE_EMBEDDINGS}:`, job.id)
+
+      const voyageKey = process.env.VOYAGE_API_KEY
+      const googleKey = process.env.GOOGLE_API_KEY
+
+      if (!voyageKey && !googleKey) {
+        console.error(`[Worker:${job.id}] No embedding API key configured (VOYAGE_API_KEY or GOOGLE_API_KEY)`)
+        return { status: 'error', error: 'No embedding API key' }
+      }
+
+      try {
+        const { createEmbeddingsService, runFullPipeline } = await import('@mrst/ai')
+        const schema = await import('@mrst/db/schema')
+
+        const embeddings = createEmbeddingsService({
+          voyageApiKey: voyageKey,
+          googleApiKey: googleKey,
+        })
+
+        const results = await runFullPipeline({
+          db: db as any,
+          embeddings,
+          tenantId: job.data.tenantId,
+          schema: {
+            embeddings: schema.embeddings,
+            embeddingQueue: schema.embeddingQueue,
+            timelineEvents: schema.timelineEvents,
+            gmailMessages: schema.gmailMessages,
+            coreCustomers: schema.coreCustomers,
+            coreVehicles: schema.coreVehicles,
+            spireonDevices: schema.spireonDevices,
+          },
+          batchSize: 25,
+        })
+
+        console.log(`[Worker:${job.id}] Embedding generation complete:`, results)
+        return { status: 'success', results }
+      } catch (error) {
+        console.error(`[Worker:${job.id}] Embedding generation failed:`, error)
+        return { status: 'error', error: (error as Error).message }
+      }
+    }
+  })
+
+  // AI Suggestions generation
+  await boss.work<{ tenantId: string }>(JOB_TYPES.GENERATE_SUGGESTIONS, { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) {
+      console.log(`[Worker] Processing ${JOB_TYPES.GENERATE_SUGGESTIONS}:`, job.id)
+
+      const anthropicKey = process.env.ANTHROPIC_API_KEY
+
+      if (!anthropicKey) {
+        console.error(`[Worker:${job.id}] ANTHROPIC_API_KEY not configured`)
+        return { status: 'error', error: 'No Anthropic API key' }
+      }
+
+      try {
+        const { createClaudeClient, generateSuggestions, saveSuggestions } = await import('@mrst/ai')
+        const schema = await import('@mrst/db/schema')
+
+        const claude = createClaudeClient(anthropicKey)
+
+        const suggestions = await generateSuggestions({
+          db: db as any,
+          claude,
+          tenantId: job.data.tenantId,
+          schema: {
+            aiTasks: schema.aiTasks,
+            timelineEvents: schema.timelineEvents,
+            gmailMessages: schema.gmailMessages,
+            hqReservations: schema.hqReservations,
+            coreCustomers: schema.coreCustomers,
+            spireonDevices: schema.spireonDevices,
+          },
+        })
+
+        const saved = await saveSuggestions({
+          db: db as any,
+          claude,
+          tenantId: job.data.tenantId,
+          schema: {
+            aiTasks: schema.aiTasks,
+          },
+        }, suggestions)
+
+        console.log(`[Worker:${job.id}] Generated ${suggestions.length} suggestions, saved ${saved}`)
+        return { status: 'success', generated: suggestions.length, saved }
+      } catch (error) {
+        console.error(`[Worker:${job.id}] Suggestions generation failed:`, error)
+        return { status: 'error', error: (error as Error).message }
+      }
     }
   })
 
