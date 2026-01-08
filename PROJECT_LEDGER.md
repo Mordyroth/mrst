@@ -383,24 +383,39 @@ Timeline Events Generated:
 - gemini.ts (Google Gemini client for fallback + vision)
 - embeddings.ts (Voyage/Google embeddings service)
 - client.ts (Unified AI client with Claude primary, Gemini fallback)
+- pipeline.ts (Embedding pipeline for all data types - 450 lines)
+- search.ts (Vector similarity search, RAG queries - 250 lines)
+- suggestions.ts (AI task suggestions, "what should I do next" - 400 lines)
+- run-pipeline.ts (CLI to run embedding generation)
 - index.ts (Module exports)
 
 ## Notes for Next Session
-Phase 7 AI Intelligence Layer in progress.
+Phase 7 AI Intelligence Layer significantly complete!
 
 **Completed this session:**
 - pgvector 0.8.0 installed and working
 - AI schema created with 5 tables (embeddings, ai_conversations, ai_messages, ai_tasks, embedding_queue)
 - HNSW vector index created for similarity search
-- @mrst/ai package created with Claude + Gemini clients
-- Embeddings service with Voyage/Google support
+- @mrst/ai package created with:
+  - Claude + Gemini clients (claude.ts, gemini.ts)
+  - Embeddings service with Voyage/Google support (embeddings.ts)
+  - Unified AI client with fallback (client.ts)
+  - Embedding pipeline for all data types (pipeline.ts)
+  - Semantic search with RAG support (search.ts)
+  - "What should I do next?" suggestions (suggestions.ts)
 - Spireon devices synced to database (247 devices)
+- Worker jobs for GENERATE_EMBEDDINGS and GENERATE_SUGGESTIONS
+
+**To run embedding pipeline:**
+```bash
+VOYAGE_API_KEY=xxx DATABASE_URL='postgresql://mrst:mrst_dev_2025@localhost:5432/mrst' npx tsx packages/ai/src/run-pipeline.ts
+```
 
 **Next Steps:**
-1. Build embedding pipeline to process existing data
-2. Create embedding worker job
-3. Implement natural language query API
-4. Build "What should I do next?" feature
+1. Get API keys (VOYAGE_API_KEY or GOOGLE_API_KEY for embeddings, ANTHROPIC_API_KEY for chat)
+2. Run embedding pipeline to generate vectors
+3. Create tRPC endpoints for AI features
+4. Build UI for suggestions and natural language search
 
 **Outstanding:**
 - certifiedautocollision.com Gmail: Needs second service account file (Client ID `113779064017479202218`)
