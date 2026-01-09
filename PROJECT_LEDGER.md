@@ -4,8 +4,8 @@
 
 ## Current Status
 - **Phase:** 7 - AI Intelligence Layer (in progress)
-- **Task:** Spireon GPS integration complete, worker fixed
-- **Progress:** 92%
+- **Task:** Fleet Map and Dashboard stats complete, ready for AI embeddings
+- **Progress:** 95%
 - **Blockers:** Need API keys (ANTHROPIC_API_KEY, VOYAGE_API_KEY) to run embedding pipeline
 
 ## Production Deployment ✅
@@ -28,26 +28,44 @@
    - Geofence API returned 404 (no geofences configured)
 
 ## Last Session
-- **Date:** 2026-01-08
+- **Date:** 2026-01-08/09
 - **Duration:** Continuation session
 - **Completed:**
-  - Spireon location polling implementation (pollCurrentLocations)
-  - Spireon GPS history backfill (backfillLocations)
-  - Spireon timeline event generation (generateTimelineEvents, 94 events)
-  - Fixed Spireon API client to properly parse lastLocation data
-  - Fixed worker pg-boss queue issue (createQueue before schedule)
-  - Added worker job types: SYNC_SPIREON_POLL, SYNC_SPIREON_BACKFILL, SYNC_SPIREON_TIMELINE
-  - Updated credentials in integration_accounts table
-  - Location records now being stored (157 records created)
-- **Stopped at:** Spireon GPS complete, worker running, ready for AI API keys
+  - **Fleet Map page** (`/mrst/map`):
+    - Shows 122 fleet vehicles matched by VIN between Monday.com and Spireon
+    - 119 active/online vehicles with GPS tracking
+    - OpenStreetMap embed centered on vehicle locations
+    - Vehicle list with addresses, timestamps, and status badges
+    - Filter toggle for inactive vehicles
+  - **Monday.com Fleet Board sync**:
+    - Synced "Travel Auto Rental Fleet" board (172 vehicles with VIN data)
+    - 171 vehicles have valid 17-character VINs
+    - VIN matching between Monday fleet and Spireon GPS (124 matches)
+  - **Spireon VIN extraction**:
+    - Updated 178 devices with VINs from raw API data
+    - Populated vehicle_vin column from raw->>'vin' JSON field
+  - **Dashboard stats API** (`dashboard.stats` endpoint):
+    - Real-time fleet vehicle count from Monday+Spireon VIN match
+    - Active rentals (70) and upcoming reservations (29) from HQ
+    - Customer count (2,383) from HQ
+    - Integration status with actual item counts and last sync times
+    - Recent activity breakdown by source (last 7 days)
+    - Fleet overview with GPS device stats
+  - **Scheduled Spireon polling**:
+    - Worker auto-discovers active Spireon integration accounts
+    - Polls GPS locations every 5 minutes
+    - Generates timeline events for location updates
+  - **Navigation updates**:
+    - Added Fleet Map to header navigation across all pages
+- **Stopped at:** Fleet Map and Dashboard complete, all services running, ready for AI API keys
 
 ## Next Steps (Ordered)
 1. Configure API keys (ANTHROPIC_API_KEY, VOYAGE_API_KEY) for embedding generation
 2. Run embedding pipeline to populate vector index
-3. Build AI suggestions UI component
-4. Add certifiedautocollision.com domain (needs DWD setup)
-5. Complete Phase 5: Spireon GPS location polling
-6. Move to Phase 6: WhatsApp
+3. Test AI suggestions with real data
+4. Add certifiedautocollision.com Gmail domain (needs DWD setup)
+5. Move to Phase 6: WhatsApp (needs credentials)
+6. Vehicle image generation with AI
 
 ## Phase Checklist
 
@@ -114,13 +132,17 @@
 
 ### Phase 5: Spireon GPS ✅ COMPLETE
 - [x] Basic Auth + X-Nspire-AppToken auth (247 assets found)
-- [x] Devices synced to database (247 devices, 25 active)
+- [x] Devices synced to database (247 devices, 165 non-inactive)
 - [x] Location polling working (pollCurrentLocations function)
 - [x] GPS history backfill (backfillLocations function)
+- [x] VIN extraction from raw API data (178 devices with VINs)
+- [x] Scheduled 5-minute polling in worker
+- [x] Timeline events created (94+ events, generateTimelineEvents function)
+- [x] Fleet Map UI with vehicle locations (/mrst/map)
+- [x] VIN-based matching with Monday.com fleet board (124 matches)
 - [ ] Diagnostics synced (pending)
 - [ ] Geofence created (shop location) - API returned 404
 - [ ] "At shop" detection working (pending)
-- [x] Timeline events created (94 events, generateTimelineEvents function)
 
 ### Phase 6: WhatsApp
 - [ ] 360Dialog client
@@ -404,36 +426,74 @@ Timeline Events Generated:
 - run-pipeline.ts (CLI to run embedding generation)
 - index.ts (Module exports)
 
-## Notes for Next Session
-Phase 7 AI Intelligence Layer significantly complete!
+## Files Created (This Session)
 
-**Completed this session:**
-- pgvector 0.8.0 installed and working
-- AI schema created with 5 tables (embeddings, ai_conversations, ai_messages, ai_tasks, embedding_queue)
-- HNSW vector index created for similarity search
-- @mrst/ai package created with:
-  - Claude + Gemini clients (claude.ts, gemini.ts)
-  - Embeddings service with Voyage/Google support (embeddings.ts)
-  - Unified AI client with fallback (client.ts)
-  - Embedding pipeline for all data types (pipeline.ts)
-  - Semantic search with RAG support (search.ts)
-  - "What should I do next?" suggestions (suggestions.ts)
-- Spireon devices synced to database (247 devices)
-- Worker jobs for GENERATE_EMBEDDINGS and GENERATE_SUGGESTIONS
+### apps/web/src/app/map/
+- page.tsx (Fleet Map page with OpenStreetMap embed, vehicle list, stats)
+
+### apps/api/src/trpc/
+- router.ts (Updated with vehicles router, dashboard router)
+
+### scripts/
+- sync-fleet-board.ts (Monday.com fleet board sync script)
+- test-map.mjs (Puppeteer test for Fleet Map page)
+- test-dashboard.mjs (Puppeteer test for Dashboard page)
+
+## Test Results (This Session)
+```
+Fleet Map Stats:
+  Fleet Vehicles (Monday+Spireon VIN match): 122
+  Active/Online: 119
+  With GPS data: 117
+
+Dashboard Stats:
+  Fleet Vehicles: 122
+  Active Rentals: 70
+  Upcoming Reservations: 29
+  Customers: 2,383
+  Monday Items: 6,862
+  HQ Reservations: 3,250
+  Gmail Messages: 14,893
+  Spireon Devices: 165
+  Timeline Events: 18,749
+
+VIN Matching:
+  Monday Fleet VINs: 171
+  Spireon Device VINs: 178
+  Matched VINs: 124
+```
+
+## Notes for Next Session
+Phase 7 AI Intelligence Layer 95% complete - just needs API keys!
+
+**Completed this session (2026-01-08/09):**
+- Fleet Map page with real-time GPS vehicle locations
+- VIN-based matching between Monday.com fleet board and Spireon GPS
+- Dashboard stats API with real data from all integrations
+- Scheduled 5-minute Spireon location polling in worker
+- Navigation updated across all pages
+
+**Live URLs:**
+- Dashboard: https://app.travelautorental.com/mrst/dashboard
+- Timeline: https://app.travelautorental.com/mrst/timeline
+- Fleet Map: https://app.travelautorental.com/mrst/map
+- Suggestions: https://app.travelautorental.com/mrst/suggestions
 
 **To run embedding pipeline:**
 ```bash
 VOYAGE_API_KEY=xxx DATABASE_URL='postgresql://mrst:mrst_dev_2025@localhost:5432/mrst' npx tsx packages/ai/src/run-pipeline.ts
 ```
 
-**Next Steps:**
-1. Get API keys (VOYAGE_API_KEY or GOOGLE_API_KEY for embeddings, ANTHROPIC_API_KEY for chat)
-2. Run embedding pipeline to generate vectors
-3. Create tRPC endpoints for AI features
-4. Build UI for suggestions and natural language search
+**To sync Monday fleet board:**
+```bash
+DATABASE_URL='postgresql://mrst:mrst_dev_2025@localhost:5432/mrst' npx tsx scripts/sync-fleet-board.ts
+```
 
 **Outstanding:**
 - certifiedautocollision.com Gmail: Needs second service account file (Client ID `113779064017479202218`)
+- WhatsApp integration: Needs 360Dialog credentials
+- AI embeddings: Needs VOYAGE_API_KEY or GOOGLE_API_KEY
+- AI chat: Needs ANTHROPIC_API_KEY
 
 **Test Scripts:**
 - `npx tsx packages/integrations/src/spireon/test-client.ts` - Test Spireon connection
