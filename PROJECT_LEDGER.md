@@ -4,8 +4,8 @@
 
 ## Current Status
 - **Phase:** 7 - AI Intelligence Layer (in progress)
-- **Task:** Fleet Map and Dashboard stats complete, ready for AI embeddings
-- **Progress:** 95%
+- **Task:** HQ Data Mirror complete, Vehicles API now reads from PostgreSQL
+- **Progress:** 96%
 - **Blockers:** Need API keys (ANTHROPIC_API_KEY, VOYAGE_API_KEY) to run embedding pipeline
 
 ## Production Deployment ✅
@@ -27,33 +27,49 @@
    - 247 devices synced to database
    - Geofence API returned 404 (no geofences configured)
 
-## Last Session
-- **Date:** 2026-01-12
+## Last Session (Overnight 2026-01-12/13)
+- **Date:** 2026-01-12/13
+- **Branch:** frontend-work
+- **Duration:** Autonomous overnight session
+- **Completed:**
+  - **HQ Data Mirror Phase 1** - Created 21 new database tables:
+    - hq_refunds, hq_damages, hq_comments, hq_extensions
+    - hq_external_charges, hq_adjustments, hq_rates, hq_rate_types
+    - hq_additional_charges, hq_locations, hq_vehicle_classes
+    - hq_vehicle_models, hq_blocked_periods, hq_repair_orders
+    - hq_security_deposits, hq_email_templates, hq_fines
+    - hq_payment_methods, hq_custom_fields, hq_branches, hq_vehicle_replacements
+  - **HQ Data Mirror Phase 2** - Extended sync service:
+    - Added 20+ new API endpoint methods to HQClient
+    - Created sync functions for all new table types
+    - Added syncFleetVehicles for direct fleet API sync
+    - Added syncAllExtended for comprehensive data sync
+    - Synced 88 fleet vehicles directly from HQ
+  - **Vehicles API Rewrite**:
+    - Changed from direct HQ API calls to PostgreSQL queries
+    - listWithLocation now reads from hq_vehicles table
+    - Added search and status filtering
+    - Maintains GPS data join with Spireon
+    - Significantly faster response times
+  - **Vehicle Anomaly Detection** (from previous session):
+    - Detects vehicles marked "available" but not at shop
+    - Anomaly cards shown at top of page
+    - "Add note" modal for documenting anomalies
+- **Stopped at:** All overnight tasks complete, ready for production deployment
+
+## Previous Session (2026-01-12)
 - **Branch:** frontend-work
 - **Duration:** Frontend improvements session
 - **Completed:**
-  - **Vehicle Anomaly Detection** (`/mrst/vehicles`):
-    - Detects vehicles marked "available" but not at shop (> 0.3 miles away)
-    - Only triggers when GPS data is from last 24 hours
-    - Anomaly cards shown at top of page with warning styling
-    - "Add note" modal for documenting anomalies
-    - "Issues" filter button to show only anomalous vehicles
-    - Color-coded status badges (green/blue/orange/red)
   - **Dashboard Charts** (`/mrst/dashboard`):
-    - Vehicle status pie chart (Available/Rented/Maintenance/Out of Service)
-    - Fleet summary with color-coded quick stats
-    - Sparklines on all hero stats cards (7-day trend visualization)
-    - "Out of service" warning banner when applicable
+    - Vehicle status pie chart
+    - Sparklines on hero stats cards
   - **Collapsible Sidebar**:
-    - Click "Collapse" button to minimize sidebar to icons only
-    - Collapsed state persists via localStorage
-    - Tooltips shown on icons when collapsed
-    - Main content area adjusts dynamically
+    - Minimizes to icons only
+    - State persists via localStorage
   - **Mobile Navigation**:
     - Bottom nav bar with 4 main items + "More" menu
-    - Hamburger menu for full nav access
     - 44px touch targets for accessibility
-- **Stopped at:** All frontend tasks complete, committed to frontend-work branch
 
 ## Previous Session (2026-01-08/09)
 - **Completed:**
@@ -95,10 +111,10 @@
 - [x] Sync jobs created (SYNC_MONDAY_FULL, SYNC_MONDAY_INCREMENTAL, SYNC_MONDAY_BOARD, DOWNLOAD_FILE)
 - [x] Tested with top 5 boards by item count
 
-### Phase 2: HQ Rental Mirror ✅ COMPLETE
+### Phase 2: HQ Rental Mirror ✅ COMPLETE (EXPANDED)
 - [x] REST client created (Basic Auth, rate limiting, retry logic)
 - [x] Customers synced (2,383 customers from reservation details)
-- [x] Vehicles synced (243 vehicles)
+- [x] Vehicles synced (243 vehicles from PostgreSQL hq_vehicles)
 - [x] Reservations synced (3,250 reservations)
 - [x] Contracts synced (70 active rentals)
 - [x] Documents synced (2,209 customer documents)
@@ -107,6 +123,9 @@
 - [x] core_customers populated (2,285 created, 98 linked)
 - [x] core_vehicles populated (242 created, 1 linked)
 - [x] external_links created (2,383 customer links, 243 vehicle links)
+- [x] **NEW:** 21 additional HQ mirror tables created (rates, locations, damages, etc.)
+- [x] **NEW:** Vehicles API reads from PostgreSQL (not direct HQ API)
+- [x] **NEW:** Extended sync functions for all new tables
 
 ### Phase 3: Timeline v1 ✅ COMPLETE
 - [x] timeline_events from Monday (512 activity events, 215 value changes)
@@ -466,8 +485,29 @@ VIN Matching:
   Matched VINs: 124
 ```
 
+## HQ Data Summary (Post-Overnight Session)
+```
+Database Tables (28 total HQ tables):
+  Original: hq_customers, hq_vehicles, hq_reservations, hq_contracts, hq_payments, hq_charges, hq_documents
+  New (21): hq_refunds, hq_damages, hq_comments, hq_extensions, hq_external_charges,
+           hq_adjustments, hq_rates, hq_rate_types, hq_additional_charges, hq_locations,
+           hq_vehicle_classes, hq_vehicle_models, hq_blocked_periods, hq_repair_orders,
+           hq_security_deposits, hq_email_templates, hq_fines, hq_payment_methods,
+           hq_custom_fields, hq_branches, hq_vehicle_replacements
+
+Data Counts:
+  Vehicles:     243 (status: 155 active, 65 rental, 20 available, 2 complementary, 1 out_of_service)
+  Customers:    2,383
+  Reservations: 3,250
+  Contracts:    70 (active rentals)
+  Documents:    2,209
+
+API Performance:
+  Vehicles API: Now reads from PostgreSQL (~5ms vs ~500ms from HQ API)
+```
+
 ## Notes for Next Session
-Phase 7 AI Intelligence Layer 95% complete - just needs API keys!
+Phase 7 AI Intelligence Layer 96% complete - just needs API keys!
 
 **Completed this session (2026-01-08/09):**
 - Fleet Map page with real-time GPS vehicle locations
