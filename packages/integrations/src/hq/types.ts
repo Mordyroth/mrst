@@ -100,6 +100,81 @@ export interface HQVehicle {
   fuel_level: number
 }
 
+/**
+ * Fleet vehicle from /fleets/vehicles endpoint
+ * This is the full vehicle record with all details
+ */
+export interface HQFleetVehicle {
+  id: number
+  label: string
+  vehicle_key: string | null
+  vehicle_model_id: number | null
+  vehicle_class_id: number | null
+  vehicle_type_id: number | null
+  year: number | null
+  color: string | null
+  vin: string | null
+  plate: string | null
+  plate_expiration_date: string | null
+  odometer: number
+  status: 'available' | 'rental' | 'maintenance' | 'out_of_service' | string
+  available_date: string | null
+  fuel_level: number
+  registration_expiration_date: string | null
+  inspection_expiration_date: string | null
+  available: boolean
+  current_location_id: number | null
+  date_of_last_maintenance: string | null
+  odometer_at_last_maintenance: number | null
+  uuid: string
+  latitude: number | null
+  longitude: number | null
+  hardware_id: string | null
+  engine_on: boolean | null
+  doors_locked: boolean | null
+  speed: number | null
+  fuel_type_id: number | null
+  tank_size: number | null
+  status_since: string | null
+  last_location_update_at: string | null
+  last_hardware_update_at: string | null
+  doors_open: boolean | null
+  hardware_provider: string | null
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+  // Nested objects
+  vehicle_class_label: string | null
+  fuel_level_for_display: string | null
+  status_color: string | null
+  status_label: string | null
+  vehicle_model: {
+    id: number
+    label: string
+    make: string
+    model: string
+  } | null
+  vehicle_class: {
+    id: number
+    label: string
+    short_description: string | null
+  } | null
+  vehicle_type: {
+    id: number
+    label: string
+  } | null
+  current_location: {
+    id: number
+    name: string
+  } | null
+  fuel_type: {
+    id: number
+    label: string
+  } | null
+  // Raw JSON for any additional fields
+  [key: string]: unknown
+}
+
 // Reservation vehicle assignment
 export interface HQReservationVehicle {
   id: number

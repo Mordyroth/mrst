@@ -1338,55 +1338,83 @@ const aiRouter = t.router({
     }),
 })
 
-// Fleet board external ID in Monday.com
+// HQ API credentials
+const HQ_TENANT_TOKEN = 'A50uV6M0jDUcM1ehJsF6kh1YtFfNXkSrDQvqEaJJnPrk3dwFeW'
+const HQ_USER_TOKEN = 'jLwBdr7fMzbrl54elfwm6Um4DqSYcbxGHhTSmYOI72CrowvUSO'
+const HQ_BASE_URL = 'https://api-america-3.caagcrm.com/api-america-3'
+const HQ_AUTH_TOKEN = Buffer.from(`${HQ_TENANT_TOKEN}:${HQ_USER_TOKEN}`).toString('base64')
+
+// Fleet board external ID in Monday.com (kept for reference)
 const FLEET_BOARD_EXTERNAL_ID = '3597643013'
 
 // Vehicles router - GPS locations and fleet data
-// Shows only vehicles in the Monday.com Travel Auto Rental Fleet board (matched by VIN)
+// NOW READS FROM PostgreSQL hq_vehicles table (synced from HQ)
 const vehiclesRouter = t.router({
-  // Get all vehicles with current GPS location (filtered to fleet board)
+  // Get all vehicles from PostgreSQL hq_vehicles with GPS location from Spireon
   listWithLocation: publicProcedure
     .input(z.object({
-      limit: z.number().min(1).max(500).default(100),
-      activeOnly: z.boolean().default(true),
+      limit: z.number().min(1).max(500).default(200),
+      activeOnly: z.boolean().default(false),
+      status: z.string().optional(), // Filter by HQ status
+      search: z.string().optional(), // Search by VIN, plate, make, model
     }).optional())
     .query(async ({ ctx, input }) => {
-      const { limit = 100, activeOnly = true } = input || {}
+      const { limit = 200, status, search } = input || {}
 
-      // Get VINs from Monday fleet board
-      const fleetVins = await ctx.db
-        .select({ vin: sql<string>`UPPER(${mondayItemColumnValues.textValue})` })
-        .from(mondayItemColumnValues)
-        .innerJoin(mondayItems, eq(mondayItemColumnValues.itemId, mondayItems.id))
-        .innerJoin(mondayBoards, eq(mondayItems.boardId, mondayBoards.id))
-        .innerJoin(mondayColumns, eq(mondayItemColumnValues.columnId, mondayColumns.id))
-        .where(and(
-          eq(mondayBoards.externalId, FLEET_BOARD_EXTERNAL_ID),
-          eq(mondayColumns.title, 'VIN'),
-          sql`LENGTH(${mondayItemColumnValues.textValue}) = 17`
-        ))
+      // Build conditions for hq_vehicles query
+      const conditions = [sql`${hqVehicles.deletedAt} IS NULL`]
 
-      const vinSet = new Set(fleetVins.map(v => v.vin?.toUpperCase()).filter(Boolean))
-
-      // Build filter conditions for Spireon devices
-      const conditions = []
-
-      if (activeOnly) {
-        conditions.push(eq(spireonDevices.isOnline, true))
+      if (status) {
+        conditions.push(eq(hqVehicles.status, status))
       }
 
-      // Filter out devices with "inactive" in their name
-      conditions.push(sql`${spireonDevices.name} NOT ILIKE '%inactive%'`)
+      if (search) {
+        const searchPattern = `%${search}%`
+        conditions.push(
+          or(
+            ilike(hqVehicles.vin, searchPattern),
+            ilike(hqVehicles.licensePlate, searchPattern),
+            ilike(hqVehicles.make, searchPattern),
+            ilike(hqVehicles.model, searchPattern),
+            ilike(hqVehicles.unitNumber, searchPattern)
+          ) ?? sql`false`
+        )
+      }
 
-      // Get Spireon devices
-      const devices = await ctx.db.select({
-        id: spireonDevices.id,
-        name: spireonDevices.name,
+      // Get vehicles from PostgreSQL hq_vehicles table
+      const hqVehiclesData = await ctx.db
+        .select({
+          id: hqVehicles.id,
+          externalId: hqVehicles.externalId,
+          vin: hqVehicles.vin,
+          licensePlate: hqVehicles.licensePlate,
+          unitNumber: hqVehicles.unitNumber,
+          year: hqVehicles.year,
+          make: hqVehicles.make,
+          model: hqVehicles.model,
+          trim: hqVehicles.trim,
+          color: hqVehicles.color,
+          vehicleType: hqVehicles.vehicleType,
+          status: hqVehicles.status,
+          availability: hqVehicles.availability,
+          currentMileage: hqVehicles.currentMileage,
+          fuelLevel: hqVehicles.fuelLevel,
+          currentLocation: hqVehicles.currentLocation,
+          dailyRate: hqVehicles.dailyRate,
+          weeklyRate: hqVehicles.weeklyRate,
+          monthlyRate: hqVehicles.monthlyRate,
+          notes: hqVehicles.notes,
+          raw: hqVehicles.raw,
+          syncedAt: hqVehicles.syncedAt,
+        })
+        .from(hqVehicles)
+        .where(and(...conditions))
+        .orderBy(hqVehicles.unitNumber, hqVehicles.make, hqVehicles.model)
+        .limit(limit)
+
+      // Get GPS data from Spireon (create VIN -> GPS map)
+      const spireonData = await ctx.db.select({
         vehicleVin: spireonDevices.vehicleVin,
-        vehicleMake: spireonDevices.vehicleMake,
-        vehicleModel: spireonDevices.vehicleModel,
-        vehicleYear: spireonDevices.vehicleYear,
-        vehicleLicensePlate: spireonDevices.vehicleLicensePlate,
         currentLat: spireonDevices.currentLat,
         currentLng: spireonDevices.currentLng,
         currentAddress: spireonDevices.currentAddress,
@@ -1394,92 +1422,188 @@ const vehiclesRouter = t.router({
         currentLocationAt: spireonDevices.currentLocationAt,
         ignitionOn: spireonDevices.ignitionOn,
         isOnline: spireonDevices.isOnline,
-        status: spireonDevices.status,
       })
         .from(spireonDevices)
-        .where(conditions.length > 0 ? and(...conditions) : undefined)
-        .orderBy(desc(spireonDevices.currentLocationAt))
-        .limit(500) // Get more to filter, then limit
+        .where(sql`${spireonDevices.vehicleVin} IS NOT NULL AND ${spireonDevices.deletedAt} IS NULL`)
 
-      // Filter to only devices with VINs in the fleet board
-      const filteredDevices = devices
-        .filter(d => d.vehicleVin && vinSet.has(d.vehicleVin.toUpperCase()))
-        .slice(0, limit)
+      // Create VIN -> GPS lookup (uppercase VINs for matching)
+      const gpsLookup = new Map<string, typeof spireonData[0]>()
+      for (const device of spireonData) {
+        if (device.vehicleVin) {
+          gpsLookup.set(device.vehicleVin.toUpperCase(), device)
+        }
+      }
+
+      // Map HQ vehicles with GPS data
+      const vehicles = hqVehiclesData.map(v => {
+        const gps = v.vin ? gpsLookup.get(v.vin.toUpperCase()) : null
+        const rawData = v.raw as Record<string, any> || {}
+
+        return {
+          id: v.id,
+          externalId: v.externalId,
+          name: `${v.year || ''} ${v.make || ''} ${v.model || ''}`.trim() || rawData.label || 'Unknown',
+          vin: v.vin,
+          make: v.make,
+          model: v.model,
+          trim: v.trim,
+          year: v.year,
+          licensePlate: v.licensePlate,
+          unitNumber: v.unitNumber || rawData.vehicle_key || rawData.prefixed_id,
+          color: v.color,
+          hqStatus: v.status || rawData.status || 'available',
+          hqStatusLabel: rawData.status_label || v.status,
+          hqStatusColor: rawData.status_color,
+          odometer: v.currentMileage || rawData.odometer,
+          fuelLevel: v.fuelLevel,
+          vehicleClass: v.vehicleType || rawData.vehicle_class_label,
+          dailyRate: v.dailyRate,
+          weeklyRate: v.weeklyRate,
+          monthlyRate: v.monthlyRate,
+          location: gps && gps.currentLat && gps.currentLng &&
+            Number(gps.currentLat) > -90 && Number(gps.currentLat) < 90 &&
+            Number(gps.currentLng) > -180 && Number(gps.currentLng) < 180 ? {
+            lat: Number(gps.currentLat),
+            lng: Number(gps.currentLng),
+            address: gps.currentAddress,
+            speed: gps.currentSpeed ? Number(gps.currentSpeed) : null,
+            updatedAt: gps.currentLocationAt,
+          } : null,
+          ignitionOn: gps?.ignitionOn ?? null,
+          isOnline: gps?.isOnline ?? false,
+          lastSyncedAt: v.syncedAt,
+        }
+      })
+
+      // Get total count for pagination info
+      const [countResult] = await ctx.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(hqVehicles)
+        .where(and(...conditions))
 
       return {
-        vehicles: filteredDevices.map(d => {
-          // Parse unit number from device name (e.g., "V347 2019 Grey Altima" -> "V347")
-          const unitMatch = d.name?.match(/^(V\d+)\s/)
-          const unitNumber = unitMatch ? unitMatch[1] : null
-
-          return {
-            id: d.id,
-            name: d.name,
-            vin: d.vehicleVin,
-            make: d.vehicleMake,
-            model: d.vehicleModel,
-            year: d.vehicleYear,
-            licensePlate: d.vehicleLicensePlate,
-            unitNumber,
-            hqStatus: null,
-            location: d.currentLat && d.currentLng && d.currentLat > -90 && d.currentLat < 90 && d.currentLng > -180 && d.currentLng < 180 ? {
-              lat: d.currentLat,
-              lng: d.currentLng,
-              address: d.currentAddress,
-              speed: d.currentSpeed,
-              updatedAt: d.currentLocationAt,
-            } : null,
-            ignitionOn: d.ignitionOn,
-            isOnline: d.isOnline,
-            status: d.status,
-          }
-        }),
-        total: filteredDevices.length,
+        vehicles,
+        total: countResult?.count ?? vehicles.length,
+        source: 'postgresql', // Indicate data source for debugging
       }
     }),
 
-  // Get summary stats for fleet (only vehicles in Monday fleet board)
+  // Get summary stats for fleet from PostgreSQL
   stats: publicProcedure.query(async ({ ctx }) => {
-    // Get VINs from Monday fleet board
-    const fleetVins = await ctx.db
-      .select({ vin: sql<string>`UPPER(${mondayItemColumnValues.textValue})` })
-      .from(mondayItemColumnValues)
-      .innerJoin(mondayItems, eq(mondayItemColumnValues.itemId, mondayItems.id))
-      .innerJoin(mondayBoards, eq(mondayItems.boardId, mondayBoards.id))
-      .innerJoin(mondayColumns, eq(mondayItemColumnValues.columnId, mondayColumns.id))
+    // Get status counts from hq_vehicles
+    const statusCounts = await ctx.db
+      .select({
+        status: hqVehicles.status,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(hqVehicles)
+      .where(sql`${hqVehicles.deletedAt} IS NULL`)
+      .groupBy(hqVehicles.status)
+
+    // Convert to object
+    const byStatus: Record<string, number> = {}
+    let total = 0
+    for (const s of statusCounts) {
+      const status = s.status || 'unknown'
+      byStatus[status] = s.count
+      total += s.count
+    }
+
+    // Get count of vehicles with GPS data
+    const [gpsCount] = await ctx.db
+      .select({ count: sql<number>`count(DISTINCT sd.vehicle_vin)::int` })
+      .from(spireonDevices)
+      .innerJoin(hqVehicles, sql`UPPER(${spireonDevices.vehicleVin}) = UPPER(${hqVehicles.vin})`)
       .where(and(
-        eq(mondayBoards.externalId, FLEET_BOARD_EXTERNAL_ID),
-        eq(mondayColumns.title, 'VIN'),
-        sql`LENGTH(${mondayItemColumnValues.textValue}) = 17`
+        sql`${spireonDevices.vehicleVin} IS NOT NULL`,
+        sql`${spireonDevices.deletedAt} IS NULL`,
+        sql`${hqVehicles.deletedAt} IS NULL`
       ))
 
-    const vinSet = new Set(fleetVins.map(v => v.vin?.toUpperCase()).filter(Boolean))
-
-    // Base filter: exclude inactive devices
-    const baseCondition = sql`${spireonDevices.name} NOT ILIKE '%inactive%'`
-
-    // Get all Spireon devices (non-inactive)
-    const allDevices = await ctx.db
-      .select({
-        vehicleVin: spireonDevices.vehicleVin,
-        isOnline: spireonDevices.isOnline,
-        currentLocationAt: spireonDevices.currentLocationAt,
-        ignitionOn: spireonDevices.ignitionOn,
-      })
-      .from(spireonDevices)
-      .where(baseCondition)
-
-    // Filter to fleet VINs and count
-    const fleetDevices = allDevices.filter(d => d.vehicleVin && vinSet.has(d.vehicleVin.toUpperCase()))
-    const recentDate = new Date(Date.now() - 24 * 60 * 60 * 1000)
-
     return {
-      total: fleetDevices.length,
-      active: fleetDevices.filter(d => d.isOnline).length,
-      recentLocation: fleetDevices.filter(d => d.currentLocationAt && d.currentLocationAt >= recentDate).length,
-      moving: fleetDevices.filter(d => d.ignitionOn).length,
+      total,
+      available: byStatus['available'] || byStatus['Available'] || 0,
+      rented: byStatus['rental'] || byStatus['Rental'] || 0,
+      maintenance: byStatus['maintenance'] || byStatus['Maintenance'] || 0,
+      outOfService: byStatus['out_of_service'] || byStatus['Out of Service'] || 0,
+      withGps: gpsCount?.count ?? 0,
+      // Legacy fields for compatibility
+      active: total,
+      recentLocation: gpsCount?.count ?? 0,
+      moving: 0, // Would need to check ignition status
+      source: 'postgresql',
     }
   }),
+
+  // Get single vehicle by ID with full details
+  get: publicProcedure
+    .input(z.object({
+      id: z.string(),
+    }))
+    .query(async ({ ctx, input }) => {
+      // Try to find by internal UUID first, then by external ID
+      let vehicle = await ctx.db
+        .select()
+        .from(hqVehicles)
+        .where(and(
+          eq(hqVehicles.id, input.id),
+          sql`${hqVehicles.deletedAt} IS NULL`
+        ))
+        .limit(1)
+
+      if (!vehicle[0]) {
+        // Try by external ID
+        vehicle = await ctx.db
+          .select()
+          .from(hqVehicles)
+          .where(and(
+            eq(hqVehicles.externalId, input.id),
+            sql`${hqVehicles.deletedAt} IS NULL`
+          ))
+          .limit(1)
+      }
+
+      if (!vehicle[0]) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Vehicle not found' })
+      }
+
+      const v = vehicle[0]
+
+      // Get GPS data if VIN exists
+      let gpsData = null
+      if (v.vin) {
+        const [gps] = await ctx.db
+          .select({
+            currentLat: spireonDevices.currentLat,
+            currentLng: spireonDevices.currentLng,
+            currentAddress: spireonDevices.currentAddress,
+            currentSpeed: spireonDevices.currentSpeed,
+            currentLocationAt: spireonDevices.currentLocationAt,
+            ignitionOn: spireonDevices.ignitionOn,
+            isOnline: spireonDevices.isOnline,
+          })
+          .from(spireonDevices)
+          .where(sql`UPPER(${spireonDevices.vehicleVin}) = UPPER(${v.vin})`)
+          .limit(1)
+
+        if (gps) {
+          gpsData = {
+            lat: gps.currentLat ? Number(gps.currentLat) : null,
+            lng: gps.currentLng ? Number(gps.currentLng) : null,
+            address: gps.currentAddress,
+            speed: gps.currentSpeed ? Number(gps.currentSpeed) : null,
+            updatedAt: gps.currentLocationAt,
+            ignitionOn: gps.ignitionOn,
+            isOnline: gps.isOnline,
+          }
+        }
+      }
+
+      return {
+        ...v,
+        gps: gpsData,
+      }
+    }),
 })
 
 // Dashboard router - aggregated stats for the dashboard

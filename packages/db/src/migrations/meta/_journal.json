@@ -8,6 +8,13 @@
       "when": 1767852322042,
       "tag": "0000_boring_the_hood",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1768250111779,
+      "tag": "0001_add_hq_mirror_tables",
+      "breakpoints": true
     }
   ]
 }
