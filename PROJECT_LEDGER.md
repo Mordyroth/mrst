@@ -28,36 +28,39 @@
    - Geofence API returned 404 (no geofences configured)
 
 ## Last Session
-- **Date:** 2026-01-08/09
-- **Duration:** Continuation session
+- **Date:** 2026-01-12
+- **Branch:** frontend-work
+- **Duration:** Frontend improvements session
 - **Completed:**
-  - **Fleet Map page** (`/mrst/map`):
-    - Shows 122 fleet vehicles matched by VIN between Monday.com and Spireon
-    - 119 active/online vehicles with GPS tracking
-    - OpenStreetMap embed centered on vehicle locations
-    - Vehicle list with addresses, timestamps, and status badges
-    - Filter toggle for inactive vehicles
-  - **Monday.com Fleet Board sync**:
-    - Synced "Travel Auto Rental Fleet" board (172 vehicles with VIN data)
-    - 171 vehicles have valid 17-character VINs
-    - VIN matching between Monday fleet and Spireon GPS (124 matches)
-  - **Spireon VIN extraction**:
-    - Updated 178 devices with VINs from raw API data
-    - Populated vehicle_vin column from raw->>'vin' JSON field
-  - **Dashboard stats API** (`dashboard.stats` endpoint):
-    - Real-time fleet vehicle count from Monday+Spireon VIN match
-    - Active rentals (70) and upcoming reservations (29) from HQ
-    - Customer count (2,383) from HQ
-    - Integration status with actual item counts and last sync times
-    - Recent activity breakdown by source (last 7 days)
-    - Fleet overview with GPS device stats
-  - **Scheduled Spireon polling**:
-    - Worker auto-discovers active Spireon integration accounts
-    - Polls GPS locations every 5 minutes
-    - Generates timeline events for location updates
-  - **Navigation updates**:
-    - Added Fleet Map to header navigation across all pages
-- **Stopped at:** Fleet Map and Dashboard complete, all services running, ready for AI API keys
+  - **Vehicle Anomaly Detection** (`/mrst/vehicles`):
+    - Detects vehicles marked "available" but not at shop (> 0.3 miles away)
+    - Only triggers when GPS data is from last 24 hours
+    - Anomaly cards shown at top of page with warning styling
+    - "Add note" modal for documenting anomalies
+    - "Issues" filter button to show only anomalous vehicles
+    - Color-coded status badges (green/blue/orange/red)
+  - **Dashboard Charts** (`/mrst/dashboard`):
+    - Vehicle status pie chart (Available/Rented/Maintenance/Out of Service)
+    - Fleet summary with color-coded quick stats
+    - Sparklines on all hero stats cards (7-day trend visualization)
+    - "Out of service" warning banner when applicable
+  - **Collapsible Sidebar**:
+    - Click "Collapse" button to minimize sidebar to icons only
+    - Collapsed state persists via localStorage
+    - Tooltips shown on icons when collapsed
+    - Main content area adjusts dynamically
+  - **Mobile Navigation**:
+    - Bottom nav bar with 4 main items + "More" menu
+    - Hamburger menu for full nav access
+    - 44px touch targets for accessibility
+- **Stopped at:** All frontend tasks complete, committed to frontend-work branch
+
+## Previous Session (2026-01-08/09)
+- **Completed:**
+  - Fleet Map page with 122 matched vehicles
+  - Monday.com Fleet Board sync (172 vehicles)
+  - Dashboard stats API with real data
+  - Scheduled 5-minute Spireon polling
 
 ## Next Steps (Ordered)
 1. Configure API keys (ANTHROPIC_API_KEY, VOYAGE_API_KEY) for embedding generation
