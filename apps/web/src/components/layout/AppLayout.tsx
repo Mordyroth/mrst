@@ -49,8 +49,12 @@ export function AppLayout({ children, user }: AppLayoutProps) {
         "transition-all duration-200",
         sidebarCollapsed ? "lg:pl-16" : "lg:pl-64"
       )}>
-        {/* Add top padding on mobile for the header, bottom padding for nav */}
-        <div className="pt-14 pb-16 lg:pt-0 lg:pb-0 min-h-screen">
+        {/* Add top padding on mobile for the header, bottom padding for nav + safe area */}
+        <div
+          className="pt-14 lg:pt-0 lg:pb-0 min-h-screen"
+          style={{ paddingBottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}
+        >
+          <div className="lg:hidden" style={{ paddingBottom: 0 }} />
           {children}
         </div>
       </main>

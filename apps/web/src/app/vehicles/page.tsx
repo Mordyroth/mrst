@@ -244,11 +244,29 @@ function VehicleCard({ vehicle }: { vehicle: Vehicle }) {
   const atShop = vehicle.location ? isAtShop(vehicle.location.lat, vehicle.location.lng) : false
   const vinLast6 = vehicle.vin ? vehicle.vin.slice(-6) : null
   const statusBadge = getHqStatusBadge(vehicle.hqStatus)
+  const isRented = vehicle.hqStatus === 'rental'
+  const isAvailable = vehicle.hqStatus === 'available'
 
   return (
     <Link href={`/mrst/vehicles/${vehicle.id}`}>
-      <Card className="hover:border-primary transition-colors cursor-pointer h-full">
+      <Card className={`hover:border-primary transition-colors cursor-pointer h-full ${atShop ? 'border-green-200 bg-green-50/30 dark:border-green-900 dark:bg-green-950/20' : ''}`}>
         <CardContent className="p-4">
+          {/* Location status banner at top */}
+          {vehicle.location && (
+            <div className={`-mx-4 -mt-4 mb-3 px-4 py-2 text-sm font-medium flex items-center gap-2 ${
+              atShop
+                ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200'
+                : isRented
+                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200'
+                  : isAvailable
+                    ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-200'
+                    : 'bg-muted text-muted-foreground'
+            }`}>
+              <MapPin className="h-4 w-4" />
+              {atShop ? 'At Shop' : isRented ? 'Out with Renter' : isAvailable ? 'Away from Shop' : 'In Field'}
+            </div>
+          )}
+
           {/* Header with unit number and HQ status */}
           <div className="flex items-start justify-between mb-3">
             <div>
@@ -297,11 +315,10 @@ function VehicleCard({ vehicle }: { vehicle: Vehicle }) {
             )}
           </div>
 
-          {/* Location */}
+          {/* Location details */}
           {vehicle.location ? (
             <div className="mt-3 pt-3 border-t">
               <div className="flex items-start gap-2">
-                <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm truncate">
                     {vehicle.location.address || `${vehicle.location.lat.toFixed(4)}, ${vehicle.location.lng.toFixed(4)}`}
@@ -309,9 +326,6 @@ function VehicleCard({ vehicle }: { vehicle: Vehicle }) {
                   <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                     <Clock className="h-3 w-3" />
                     {formatTimeAgo(vehicle.location.updatedAt)}
-                    {atShop && (
-                      <Badge variant="outline" className="text-xs py-0 px-1 text-green-600 border-green-600">At Shop</Badge>
-                    )}
                     {vehicle.isOnline && (
                       <Badge variant="outline" className="text-xs py-0 px-1">
                         <Wifi className="h-2.5 w-2.5 mr-0.5" />
@@ -424,6 +438,17 @@ export default function VehiclesPage() {
     fetchData()
   }, [])
 
+  // Helper function to get sort priority:
+  // 0 = At Shop (highest priority)
+  // 1 = Away with Renter (rental status, not at shop)
+  // 2 = Everything else
+  const getVehicleSortPriority = (v: Vehicle): number => {
+    const atShop = v.location ? isAtShop(v.location.lat, v.location.lng) : false
+    if (atShop) return 0
+    if (!atShop && v.hqStatus === 'rental') return 1
+    return 2
+  }
+
   // Filter vehicles by HQ status and detect anomalies
   const { anomalyVehicles, filteredVehicles, totalAnomalies } = useMemo(() => {
     const anomalies: Vehicle[] = []
@@ -469,6 +494,17 @@ export default function VehiclesPage() {
         normal.push(v)
       }
     }
+
+    // Sort: At Shop first, then Away with Renters, then others
+    normal.sort((a, b) => {
+      const priorityA = getVehicleSortPriority(a)
+      const priorityB = getVehicleSortPriority(b)
+      if (priorityA !== priorityB) return priorityA - priorityB
+      // Secondary sort by unit number or name
+      const nameA = a.unitNumber || a.name || ''
+      const nameB = b.unitNumber || b.name || ''
+      return nameA.localeCompare(nameB)
+    })
 
     return {
       anomalyVehicles: anomalies,

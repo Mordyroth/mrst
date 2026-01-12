@@ -305,9 +305,9 @@ export function Sidebar({ user }: SidebarProps) {
         </Link>
       </header>
 
-      {/* Mobile Bottom Navigation */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 h-16 border-t bg-card">
-        <div className="grid grid-cols-5 h-full">
+      {/* Mobile Bottom Navigation - with safe area for notched devices */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t bg-card" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+        <div className="grid grid-cols-5 h-16">
           {bottomNavItems.map((item) => {
             const active = isActivePath(pathname, item.path)
             return (
