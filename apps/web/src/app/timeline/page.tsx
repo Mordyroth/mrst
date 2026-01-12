@@ -7,6 +7,7 @@ import {
   type TimelineFiltersState,
   type TimelineSource,
 } from '@mrst/ui'
+import { AppLayout } from '@/components/layout/AppLayout'
 
 // Get API URL - use same origin in browser, env var for SSR
 const getApiUrl = () => {
@@ -139,34 +140,11 @@ export default function TimelinePage() {
     setCollapsed(newCollapsed)
   }
 
-  return (
-    <main className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-4">
-              <a href="/mrst/dashboard" className="text-lg font-bold">
-                MRST
-              </a>
-              <nav className="flex gap-4">
-                <a
-                  href="/mrst/dashboard"
-                  className="text-sm text-muted-foreground hover:text-foreground"
-                >
-                  Dashboard
-                </a>
-                <a href="/mrst/timeline" className="text-sm font-medium">
-                  Timeline
-                </a>
-              </nav>
-            </div>
-          </div>
-        </div>
-      </header>
+  const user = { email: 'admin@travelautorental.com', name: 'Admin' }
 
-      {/* Main content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  return (
+    <AppLayout user={user}>
+      <div className="p-4 sm:p-6 lg:p-8">
         <div className="mb-6">
           <h1 className="text-2xl font-bold">Activity Timeline</h1>
           <p className="text-muted-foreground mt-1">
@@ -206,6 +184,6 @@ export default function TimelinePage() {
           }
         />
       </div>
-    </main>
+    </AppLayout>
   )
 }

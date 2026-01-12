@@ -1,6 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { AppLayout } from '@/components/layout/AppLayout'
+import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Badge } from '@/components/ui/badge'
 
 // Get API URL - use same origin in browser, env var for SSR
 const getApiUrl = () => {
@@ -95,38 +99,12 @@ export default function MapPage() {
       }
     : { lat: 40.7128, lng: -74.0060 } // NYC default
 
-  return (
-    <main className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-4">
-              <span className="text-lg font-bold">MRST</span>
-              <nav className="flex gap-4">
-                <a href="/mrst/dashboard" className="text-sm text-muted-foreground hover:text-foreground">
-                  Dashboard
-                </a>
-                <a href="/mrst/timeline" className="text-sm text-muted-foreground hover:text-foreground">
-                  Timeline
-                </a>
-                <a href="/mrst/map" className="text-sm font-medium">
-                  Fleet Map
-                </a>
-                <a href="/mrst/suggestions" className="text-sm text-muted-foreground hover:text-foreground">
-                  Suggestions
-                </a>
-              </nav>
-            </div>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-muted-foreground">admin@travelautorental.com</span>
-            </div>
-          </div>
-        </div>
-      </header>
+  const user = { email: 'admin@travelautorental.com', name: 'Admin' }
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center justify-between mb-6">
+  return (
+    <AppLayout user={user}>
+      <div className="p-4 sm:p-6 lg:p-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
             <h1 className="text-3xl font-bold">Fleet Map</h1>
             <p className="mt-1 text-muted-foreground">
@@ -257,6 +235,6 @@ export default function MapPage() {
           </>
         )}
       </div>
-    </main>
+    </AppLayout>
   )
 }

@@ -140,7 +140,7 @@ function VehicleStatusPieChart({ stats }: { stats: VehicleStats }) {
           ))}
         </Pie>
         <Tooltip
-          formatter={(value: number, name: string) => [`${value} vehicles`, name]}
+          formatter={(value) => [`${value} vehicles`, '']}
           contentStyle={{
             backgroundColor: 'hsl(var(--card))',
             border: '1px solid hsl(var(--border))',

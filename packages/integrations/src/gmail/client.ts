@@ -7,17 +7,44 @@ import { google, gmail_v1, admin_directory_v1 } from 'googleapis'
 import * as fs from 'fs'
 
 /**
- * Default service account path
+ * Service account paths per domain
+ * Each domain requires its own service account with domain-wide delegation
  */
-export const SERVICE_ACCOUNT_PATH = '/home/ec2-user/google-service-account.json'
+export const DOMAIN_SERVICE_ACCOUNTS: Record<string, string> = {
+  'travelautorental.com': '/home/ec2-user/projects/mrst/config/google-service-account.json',
+  'certifiedautocollision.com': '/home/ec2-user/projects/mrst/config/certified-service-account.json',
+}
+
+/**
+ * Gmail API scope - full access for read/write/send
+ * Used for both travelautorental.com and certifiedautocollision.com
+ */
+export const GMAIL_SCOPE = 'https://mail.google.com/'
+
+/**
+ * Default service account path (for backwards compatibility)
+ */
+export const SERVICE_ACCOUNT_PATH = DOMAIN_SERVICE_ACCOUNTS['travelautorental.com']!
 
 /**
  * Domains to sync mailboxes from
  */
-export const DOMAINS_TO_SYNC = [
-  'travelautorental.com',
-  'certifiedautocollision.com',
-]
+export const DOMAINS_TO_SYNC = Object.keys(DOMAIN_SERVICE_ACCOUNTS)
+
+/**
+ * Get the service account path for a given email address
+ */
+export function getServiceAccountForEmail(email: string): string {
+  const domain = email.split('@')[1]
+  if (!domain) {
+    throw new Error(`Invalid email address: ${email}`)
+  }
+  const serviceAccountPath = DOMAIN_SERVICE_ACCOUNTS[domain]
+  if (!serviceAccountPath) {
+    throw new Error(`No service account configured for domain: ${domain}`)
+  }
+  return serviceAccountPath
+}
 
 export interface GmailClientConfig {
   serviceAccountPath?: string
@@ -44,16 +71,18 @@ export function loadServiceAccountCredentials(path: string = SERVICE_ACCOUNT_PAT
 
 /**
  * Create a Gmail client using service account credentials
+ * Automatically selects the correct service account based on email domain
  */
 export async function createGmailClient(config: GmailClientConfig): Promise<GmailClient> {
-  const credentials = loadServiceAccountCredentials(config.serviceAccountPath || SERVICE_ACCOUNT_PATH)
+  const serviceAccountPath = config.serviceAccountPath || getServiceAccountForEmail(config.userEmail)
+  const credentials = loadServiceAccountCredentials(serviceAccountPath)
 
   // Create JWT client with domain-wide delegation using google.auth.JWT
-  // Only use gmail.readonly scope (matching PHP implementation)
+  // Full Gmail scope for read/write/send access
   const auth = new google.auth.JWT({
     email: credentials.client_email,
     key: credentials.private_key,
-    scopes: ['https://www.googleapis.com/auth/gmail.readonly'],
+    scopes: [GMAIL_SCOPE],
     subject: config.userEmail, // Impersonate this user
   })
 
@@ -125,11 +154,10 @@ export async function discoverDomainUsers(
 
 /**
  * Discover all mailboxes across all configured domains
- * Uses per-domain admin emails for impersonation
+ * Uses per-domain admin emails and service accounts for impersonation
  */
 export async function discoverAllMailboxes(
   domainAdmins: Record<string, string>,
-  serviceAccountPath: string = SERVICE_ACCOUNT_PATH,
   domains: string[] = DOMAINS_TO_SYNC
 ): Promise<{ domain: string; emails: string[] }[]> {
   const results: { domain: string; emails: string[] }[] = []
@@ -138,6 +166,13 @@ export async function discoverAllMailboxes(
     const adminEmail = domainAdmins[domain]
     if (!adminEmail) {
       console.error(`No admin email configured for domain: ${domain}`)
+      results.push({ domain, emails: [] })
+      continue
+    }
+
+    const serviceAccountPath = DOMAIN_SERVICE_ACCOUNTS[domain]
+    if (!serviceAccountPath) {
+      console.error(`No service account configured for domain: ${domain}`)
       results.push({ domain, emails: [] })
       continue
     }
