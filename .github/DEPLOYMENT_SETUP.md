@@ -3,6 +3,8 @@
 ## Overview
 Automatic deployment is configured via GitHub Actions. Pushing to specific branches will trigger deployment to production.
 
+**Status**: Workflow active - deployments will run automatically on push.
+
 ## Branches that auto-deploy:
 - `main`
 - `frontend-work`
