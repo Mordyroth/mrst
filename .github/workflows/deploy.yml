@@ -39,6 +39,23 @@ jobs:
             echo "🏗️ Building..."
             pnpm build
 
+            echo "🗄️ Running database migrations..."
+            # Check if there are new migration files and run them
+            if [ -d "packages/db/src/migrations" ]; then
+              for migration in packages/db/src/migrations/*.sql; do
+                if [ -f "$migration" ]; then
+                  echo "  Running migration: $(basename $migration)"
+                  psql "$DATABASE_URL" -f "$migration" 2>&1 | grep -v "already exists" || true
+                fi
+              done
+            fi
+
+            echo "🔄 Syncing fleet vehicles..."
+            # Re-sync fleet vehicles to apply is_fleet_vehicle flag
+            cd packages/integrations
+            npx tsx src/hq/run-extended-sync.ts || echo "⚠️ Sync failed, continuing with deployment"
+            cd ../..
+
             echo "🔄 Restarting services..."
             pm2 restart mrst-api
             pm2 restart mrst-web
