@@ -3,7 +3,7 @@
 ## Overview
 Automatic deployment is configured via GitHub Actions. Pushing to specific branches will trigger deployment to production.
 
-**Status**: Workflow active - deployments will run automatically on push.
+**Status**: Workflow active - deployments will run automatically on push. ✅ SSH key configured.
 
 ## Branches that auto-deploy:
 - `main`
