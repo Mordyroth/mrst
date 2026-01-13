@@ -1519,7 +1519,7 @@ const vehiclesRouter = t.router({
 
     // Get count of vehicles with GPS data (only fleet vehicles)
     const [gpsCount] = await ctx.db
-      .select({ count: sql<number>`count(DISTINCT sd.vehicle_vin)::int` })
+      .select({ count: sql<number>`count(DISTINCT ${spireonDevices.vehicleVin})::int` })
       .from(spireonDevices)
       .innerJoin(hqVehicles, sql`UPPER(${spireonDevices.vehicleVin}) = UPPER(${hqVehicles.vin})`)
       .where(and(
