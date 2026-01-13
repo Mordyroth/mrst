@@ -40,21 +40,31 @@ jobs:
             pnpm build
 
             echo "🗄️ Running database migrations..."
+            # Load DATABASE_URL from .env if exists, or use default
+            if [ -f ".env" ]; then
+              export $(cat .env | grep DATABASE_URL | xargs)
+            elif [ -f ".env.local" ]; then
+              export $(cat .env.local | grep DATABASE_URL | xargs)
+            else
+              # Fallback: extract from ecosystem.config.js
+              export DATABASE_URL=$(node -e "const config = require('./ecosystem.config.js'); console.log(config.apps[0].env.DATABASE_URL || config.apps[1].env.DATABASE_URL);")
+            fi
+
+            echo "Database URL configured: ${DATABASE_URL:0:20}..."
+
             # Check if there are new migration files and run them
             if [ -d "packages/db/src/migrations" ]; then
               for migration in packages/db/src/migrations/*.sql; do
                 if [ -f "$migration" ]; then
                   echo "  Running migration: $(basename $migration)"
-                  psql "$DATABASE_URL" -f "$migration" 2>&1 | grep -v "already exists" || true
+                  psql "$DATABASE_URL" -f "$migration" 2>&1 || echo "  (Migration may have already been applied)"
                 fi
               done
             fi
 
             echo "🔄 Syncing fleet vehicles..."
             # Re-sync fleet vehicles to apply is_fleet_vehicle flag
-            cd packages/integrations
-            npx tsx src/hq/run-extended-sync.ts || echo "⚠️ Sync failed, continuing with deployment"
-            cd ../..
+            DATABASE_URL="$DATABASE_URL" npx tsx packages/integrations/src/hq/run-extended-sync.ts || echo "⚠️ Sync failed, continuing with deployment"
 
             echo "🔄 Restarting services..."
             pm2 restart mrst-api
