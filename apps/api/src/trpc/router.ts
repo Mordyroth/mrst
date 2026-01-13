@@ -1606,6 +1606,425 @@ const vehiclesRouter = t.router({
     }),
 })
 
+// Customers router - customer management with aggregated data
+const customersRouter = t.router({
+  // List customers with search and filters
+  list: publicProcedure
+    .input(z.object({
+      limit: z.number().min(1).max(500).default(100),
+      offset: z.number().min(0).default(0),
+      search: z.string().optional(), // Search by name, email, phone
+      hasActiveRental: z.boolean().optional(), // Filter customers with active rentals
+      sortBy: z.enum(['name', 'recent', 'rentals']).default('name'),
+    }).optional())
+    .query(async ({ ctx, input }) => {
+      const { limit = 100, offset = 0, search, hasActiveRental, sortBy = 'name' } = input || {}
+
+      // Build base query conditions
+      const conditions = [sql`${coreCustomers.deletedAt} IS NULL`]
+
+      if (search) {
+        const searchPattern = `%${search}%`
+        conditions.push(
+          or(
+            ilike(coreCustomers.fullName, searchPattern),
+            ilike(coreCustomers.email, searchPattern),
+            ilike(coreCustomers.phone, searchPattern),
+            ilike(hqCustomers.licenseNumber, searchPattern)
+          ) ?? sql`false`
+        )
+      }
+
+      // Get customers from core_customers with HQ data
+      const customersData = await ctx.db
+        .select({
+          id: coreCustomers.id,
+          fullName: coreCustomers.fullName,
+          email: coreCustomers.email,
+          phone: coreCustomers.phone,
+          address: coreCustomers.address,
+          city: coreCustomers.city,
+          state: coreCustomers.state,
+          zipCode: coreCustomers.zipCode,
+          createdAt: coreCustomers.createdAt,
+          updatedAt: coreCustomers.updatedAt,
+          // HQ specific fields
+          hqId: hqCustomers.id,
+          hqExternalId: hqCustomers.externalId,
+          licenseNumber: hqCustomers.licenseNumber,
+          dateOfBirth: hqCustomers.dateOfBirth,
+          raw: hqCustomers.raw,
+        })
+        .from(coreCustomers)
+        .leftJoin(
+          sql`LATERAL (
+            SELECT el.external_id, hqc.*
+            FROM external_links el
+            INNER JOIN hq_customers hqc ON hqc.external_id = el.external_id
+            WHERE el.entity_type = 'customer'
+              AND el.entity_id = ${coreCustomers.id}
+              AND el.source_system = 'hq'
+              AND hqc.deleted_at IS NULL
+            LIMIT 1
+          ) AS hq_data`,
+          sql`true`
+        )
+        .leftJoin(hqCustomers, eq(sql`hq_data.id`, hqCustomers.id))
+        .where(and(...conditions))
+        .orderBy(
+          sortBy === 'name' ? coreCustomers.fullName :
+          sortBy === 'recent' ? desc(coreCustomers.updatedAt) :
+          desc(coreCustomers.createdAt)
+        )
+        .limit(limit)
+        .offset(offset)
+
+      // Get counts for related data
+      const customerIds = customersData.map(c => c.id)
+
+      // Count active rentals per customer
+      const activeRentals = customerIds.length > 0 ? await ctx.db
+        .select({
+          customerId: sql<string>`el.entity_id`,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(hqReservations)
+        .innerJoin(
+          sql`external_links el`,
+          sql`el.source_system = 'hq' AND el.entity_type = 'customer' AND el.external_id = ${hqReservations.customerId}`
+        )
+        .where(and(
+          sql`el.entity_id = ANY(${customerIds})`,
+          eq(hqReservations.status, 'active'),
+          sql`${hqReservations.deletedAt} IS NULL`
+        ))
+        .groupBy(sql`el.entity_id`) : []
+
+      const activeRentalMap = new Map(activeRentals.map(r => [r.customerId, r.count]))
+
+      // Count timeline events per customer
+      const eventCounts = customerIds.length > 0 ? await ctx.db
+        .select({
+          customerId: timelineEventLinks.entityId,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(timelineEventLinks)
+        .where(and(
+          eq(timelineEventLinks.entityType, 'customer'),
+          inArray(timelineEventLinks.entityId, customerIds)
+        ))
+        .groupBy(timelineEventLinks.entityId) : []
+
+      const eventCountMap = new Map(eventCounts.map(e => [e.customerId, e.count]))
+
+      // Map customers with aggregated data
+      const customers = customersData.map(c => {
+        const rawData = c.raw as Record<string, any> || {}
+        const activeRentalCount = activeRentalMap.get(c.id) || 0
+        const eventCount = eventCountMap.get(c.id) || 0
+
+        return {
+          id: c.id,
+          fullName: c.fullName,
+          email: c.email,
+          phone: c.phone,
+          address: c.address,
+          city: c.city,
+          state: c.state,
+          zipCode: c.zipCode,
+          licenseNumber: c.licenseNumber,
+          dateOfBirth: c.dateOfBirth,
+          hqExternalId: c.hqExternalId,
+          activeRentals: activeRentalCount,
+          totalEvents: eventCount,
+          createdAt: c.createdAt,
+          updatedAt: c.updatedAt,
+        }
+      })
+
+      // Filter by active rental if requested
+      const filteredCustomers = hasActiveRental !== undefined
+        ? customers.filter(c => hasActiveRental ? c.activeRentals > 0 : c.activeRentals === 0)
+        : customers
+
+      // Get total count
+      const [countResult] = await ctx.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(coreCustomers)
+        .where(and(...conditions))
+
+      return {
+        customers: filteredCustomers,
+        total: countResult?.count ?? filteredCustomers.length,
+        offset,
+        limit,
+      }
+    }),
+
+  // Get single customer with full details
+  get: publicProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+    }))
+    .query(async ({ ctx, input }) => {
+      // Get customer from core_customers with HQ data
+      const [customer] = await ctx.db
+        .select({
+          id: coreCustomers.id,
+          fullName: coreCustomers.fullName,
+          email: coreCustomers.email,
+          phone: coreCustomers.phone,
+          address: coreCustomers.address,
+          city: coreCustomers.city,
+          state: coreCustomers.state,
+          zipCode: coreCustomers.zipCode,
+          createdAt: coreCustomers.createdAt,
+          updatedAt: coreCustomers.updatedAt,
+        })
+        .from(coreCustomers)
+        .where(and(
+          eq(coreCustomers.id, input.id),
+          sql`${coreCustomers.deletedAt} IS NULL`
+        ))
+        .limit(1)
+
+      if (!customer) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Customer not found',
+        })
+      }
+
+      // Get HQ customer data via external_links
+      const [hqCustomer] = await ctx.db
+        .select()
+        .from(hqCustomers)
+        .innerJoin(
+          sql`external_links el`,
+          sql`el.source_system = 'hq' AND el.entity_type = 'customer' AND el.entity_id = ${input.id} AND el.external_id = ${hqCustomers.externalId}`
+        )
+        .where(sql`${hqCustomers.deletedAt} IS NULL`)
+        .limit(1)
+
+      // Get current active rentals
+      const activeRentals = await ctx.db
+        .select({
+          id: hqReservations.id,
+          externalId: hqReservations.externalId,
+          vehicleId: hqReservations.vehicleId,
+          startDate: hqReservations.startDate,
+          endDate: hqReservations.endDate,
+          status: hqReservations.status,
+          totalAmount: hqReservations.totalAmount,
+          raw: hqReservations.raw,
+        })
+        .from(hqReservations)
+        .innerJoin(
+          sql`external_links el`,
+          sql`el.source_system = 'hq' AND el.entity_type = 'customer' AND el.entity_id = ${input.id} AND el.external_id = ${hqReservations.customerId}`
+        )
+        .where(and(
+          eq(hqReservations.status, 'active'),
+          sql`${hqReservations.deletedAt} IS NULL`
+        ))
+        .limit(10)
+
+      // Get upcoming reservations
+      const upcomingReservations = await ctx.db
+        .select({
+          id: hqReservations.id,
+          externalId: hqReservations.externalId,
+          vehicleId: hqReservations.vehicleId,
+          startDate: hqReservations.startDate,
+          endDate: hqReservations.endDate,
+          status: hqReservations.status,
+          totalAmount: hqReservations.totalAmount,
+          raw: hqReservations.raw,
+        })
+        .from(hqReservations)
+        .innerJoin(
+          sql`external_links el`,
+          sql`el.source_system = 'hq' AND el.entity_type = 'customer' AND el.entity_id = ${input.id} AND el.external_id = ${hqReservations.customerId}`
+        )
+        .where(and(
+          eq(hqReservations.status, 'upcoming'),
+          sql`${hqReservations.deletedAt} IS NULL`
+        ))
+        .orderBy(hqReservations.startDate)
+        .limit(10)
+
+      // Get lifetime stats
+      const [rentalStats] = await ctx.db
+        .select({
+          totalRentals: sql<number>`count(*)::int`,
+          totalRevenue: sql<number>`sum(${hqReservations.totalAmount})::numeric`,
+        })
+        .from(hqReservations)
+        .innerJoin(
+          sql`external_links el`,
+          sql`el.source_system = 'hq' AND el.entity_type = 'customer' AND el.entity_id = ${input.id} AND el.external_id = ${hqReservations.customerId}`
+        )
+        .where(sql`${hqReservations.deletedAt} IS NULL`)
+
+      // Get event counts by type
+      const eventCounts = await ctx.db
+        .select({
+          type: timelineEvents.type,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(timelineEvents)
+        .innerJoin(timelineEventLinks, eq(timelineEventLinks.eventId, timelineEvents.id))
+        .where(and(
+          eq(timelineEventLinks.entityType, 'customer'),
+          eq(timelineEventLinks.entityId, input.id)
+        ))
+        .groupBy(timelineEvents.type)
+
+      const eventCountMap: Record<string, number> = {}
+      for (const e of eventCounts) {
+        eventCountMap[e.type] = e.count
+      }
+
+      // Get recent emails (last 5)
+      const recentEmails = await ctx.db
+        .select({
+          id: gmailMessages.id,
+          subject: gmailMessages.subject,
+          snippet: gmailMessages.snippet,
+          fromEmail: gmailMessages.fromEmail,
+          fromName: gmailMessages.fromName,
+          date: gmailMessages.date,
+          hasAttachments: gmailMessages.hasAttachments,
+        })
+        .from(gmailMessages)
+        .innerJoin(timelineEvents, eq(timelineEvents.sourceId, gmailMessages.id))
+        .innerJoin(timelineEventLinks, eq(timelineEventLinks.eventId, timelineEvents.id))
+        .where(and(
+          eq(timelineEventLinks.entityType, 'customer'),
+          eq(timelineEventLinks.entityId, input.id),
+          eq(timelineEvents.type, 'email_received')
+        ))
+        .orderBy(desc(gmailMessages.date))
+        .limit(5)
+
+      // Get Monday items linked to this customer
+      const mondayItemsData = await ctx.db
+        .select({
+          id: mondayItems.id,
+          externalId: mondayItems.externalId,
+          name: mondayItems.name,
+          boardId: mondayBoards.externalId,
+          boardName: mondayBoards.name,
+          updatedAt: mondayItems.updatedAt,
+        })
+        .from(mondayItems)
+        .innerJoin(mondayBoards, eq(mondayItems.boardId, mondayBoards.id))
+        .innerJoin(timelineEvents, eq(timelineEvents.sourceId, mondayItems.id))
+        .innerJoin(timelineEventLinks, eq(timelineEventLinks.eventId, timelineEvents.id))
+        .where(and(
+          eq(timelineEventLinks.entityType, 'customer'),
+          eq(timelineEventLinks.entityId, input.id),
+          eq(timelineEvents.source, 'monday')
+        ))
+        .limit(20)
+
+      return {
+        customer: {
+          ...customer,
+          licenseNumber: hqCustomer?.[0]?.licenseNumber,
+          dateOfBirth: hqCustomer?.[0]?.dateOfBirth,
+          hqRaw: hqCustomer?.[0]?.raw,
+        },
+        stats: {
+          lifetimeRentals: rentalStats?.totalRentals ?? 0,
+          totalRevenue: rentalStats?.totalRevenue ? Number(rentalStats.totalRevenue) : 0,
+          emailCount: eventCountMap['email_received'] || 0,
+          mondayItemCount: mondayItemsData.length,
+          totalEvents: Object.values(eventCountMap).reduce((sum, c) => sum + c, 0),
+        },
+        activeRentals,
+        upcomingReservations,
+        recentEmails,
+        mondayItems: mondayItemsData,
+      }
+    }),
+
+  // Get customer stats for dashboard
+  stats: publicProcedure.query(async ({ ctx }) => {
+    const [totals] = await ctx.db
+      .select({
+        total: sql<number>`count(*)::int`,
+      })
+      .from(coreCustomers)
+      .where(sql`${coreCustomers.deletedAt} IS NULL`)
+
+    // Count customers with active rentals
+    const [withActiveRentals] = await ctx.db
+      .select({
+        count: sql<number>`count(DISTINCT el.entity_id)::int`,
+      })
+      .from(hqReservations)
+      .innerJoin(
+        sql`external_links el`,
+        sql`el.source_system = 'hq' AND el.entity_type = 'customer' AND el.external_id = ${hqReservations.customerId}`
+      )
+      .where(and(
+        eq(hqReservations.status, 'active'),
+        sql`${hqReservations.deletedAt} IS NULL`
+      ))
+
+    // Count recent customers (last 30 days)
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+    const [recentCustomers] = await ctx.db
+      .select({
+        count: sql<number>`count(*)::int`,
+      })
+      .from(coreCustomers)
+      .where(and(
+        sql`${coreCustomers.deletedAt} IS NULL`,
+        gte(coreCustomers.createdAt, thirtyDaysAgo)
+      ))
+
+    return {
+      total: totals?.total ?? 0,
+      withActiveRentals: withActiveRentals?.count ?? 0,
+      recentCustomers: recentCustomers?.count ?? 0,
+    }
+  }),
+
+  // Search customers for typeahead
+  search: publicProcedure
+    .input(z.object({
+      query: z.string().min(1),
+      limit: z.number().min(1).max(20).default(10),
+    }))
+    .query(async ({ ctx, input }) => {
+      const searchPattern = `%${input.query}%`
+
+      const results = await ctx.db
+        .select({
+          id: coreCustomers.id,
+          fullName: coreCustomers.fullName,
+          email: coreCustomers.email,
+          phone: coreCustomers.phone,
+        })
+        .from(coreCustomers)
+        .where(and(
+          sql`${coreCustomers.deletedAt} IS NULL`,
+          or(
+            ilike(coreCustomers.fullName, searchPattern),
+            ilike(coreCustomers.email, searchPattern),
+            ilike(coreCustomers.phone, searchPattern)
+          ) ?? sql`false`
+        ))
+        .limit(input.limit)
+
+      return results
+    }),
+})
+
 // Dashboard router - aggregated stats for the dashboard
 const dashboardRouter = t.router({
   // Get all dashboard stats in a single call
@@ -1751,6 +2170,7 @@ export const appRouter = t.router({
   timeline: timelineRouter,
   ai: aiRouter,
   vehicles: vehiclesRouter,
+  customers: customersRouter,
   dashboard: dashboardRouter,
 })
 
