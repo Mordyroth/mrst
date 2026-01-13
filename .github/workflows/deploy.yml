@@ -1,0 +1,63 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+      - frontend-work
+      - claude/code-review-feedback-YAe51
+      - claude/find-uncommitted-changes-6sZ5T
+
+jobs:
+  deploy:
+    name: Deploy to app.travelautorental.com
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to production server
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: app.travelautorental.com
+          username: ec2-user
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /home/ec2-user/projects/mrst
+
+            echo "📥 Pulling latest code..."
+            git fetch origin
+            git checkout ${{ github.ref_name }}
+            git pull origin ${{ github.ref_name }}
+
+            echo "📦 Installing dependencies..."
+            export PNPM_HOME="/home/ec2-user/.local/share/pnpm"
+            export PATH="$PNPM_HOME:$PATH"
+            pnpm install --frozen-lockfile
+
+            echo "🏗️ Building..."
+            pnpm build
+
+            echo "🔄 Restarting services..."
+            pm2 restart mrst-api
+            pm2 restart mrst-web
+
+            echo "📊 Service status:"
+            pm2 list | grep mrst
+
+            echo ""
+            echo "✅ Deployment complete!"
+            echo "🔗 App: https://app.travelautorental.com/mrst/customers"
+
+      - name: Deployment notification
+        if: success()
+        run: |
+          echo "✅ Successfully deployed ${{ github.ref_name }} to production"
+          echo "🔗 https://app.travelautorental.com/mrst/"
+
+      - name: Deployment failed
+        if: failure()
+        run: |
+          echo "❌ Deployment failed for ${{ github.ref_name }}"
+          exit 1
