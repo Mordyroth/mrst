@@ -84,6 +84,7 @@ export const hqVehicles = pgTable('hq_vehicles', {
   monthlyRate: decimal('monthly_rate', { precision: 10, scale: 2 }),
   // Metadata
   notes: text('notes'),
+  isFleetVehicle: boolean('is_fleet_vehicle').default(false).notNull(), // True if synced from /fleets/vehicles endpoint
   // Mirror fields
   raw: jsonb('raw').notNull(),
   firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),

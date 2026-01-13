@@ -1362,7 +1362,12 @@ const vehiclesRouter = t.router({
       const { limit = 200, status, search } = input || {}
 
       // Build conditions for hq_vehicles query
-      const conditions = [sql`${hqVehicles.deletedAt} IS NULL`]
+      // IMPORTANT: Only show fleet vehicles (from /fleets/vehicles endpoint)
+      // NOT vehicles that only appear in reservation data
+      const conditions = [
+        sql`${hqVehicles.deletedAt} IS NULL`,
+        eq(hqVehicles.isFleetVehicle, true) // Only show actual fleet vehicles (~88 vehicles)
+      ]
 
       if (status) {
         conditions.push(eq(hqVehicles.status, status))
@@ -1490,14 +1495,17 @@ const vehiclesRouter = t.router({
 
   // Get summary stats for fleet from PostgreSQL
   stats: publicProcedure.query(async ({ ctx }) => {
-    // Get status counts from hq_vehicles
+    // Get status counts from hq_vehicles (only fleet vehicles)
     const statusCounts = await ctx.db
       .select({
         status: hqVehicles.status,
         count: sql<number>`count(*)::int`,
       })
       .from(hqVehicles)
-      .where(sql`${hqVehicles.deletedAt} IS NULL`)
+      .where(and(
+        sql`${hqVehicles.deletedAt} IS NULL`,
+        eq(hqVehicles.isFleetVehicle, true) // Only count actual fleet vehicles
+      ))
       .groupBy(hqVehicles.status)
 
     // Convert to object
@@ -1509,7 +1517,7 @@ const vehiclesRouter = t.router({
       total += s.count
     }
 
-    // Get count of vehicles with GPS data
+    // Get count of vehicles with GPS data (only fleet vehicles)
     const [gpsCount] = await ctx.db
       .select({ count: sql<number>`count(DISTINCT sd.vehicle_vin)::int` })
       .from(spireonDevices)
@@ -1517,7 +1525,8 @@ const vehiclesRouter = t.router({
       .where(and(
         sql`${spireonDevices.vehicleVin} IS NOT NULL`,
         sql`${spireonDevices.deletedAt} IS NULL`,
-        sql`${hqVehicles.deletedAt} IS NULL`
+        sql`${hqVehicles.deletedAt} IS NULL`,
+        eq(hqVehicles.isFleetVehicle, true) // Only count fleet vehicles
       ))
 
     return {

@@ -1658,6 +1658,7 @@ export async function syncFleetVehicles(ctx: HQSyncContext): Promise<HQSyncResul
             weeklyRate: vehicle.weekly_rate || null,
             monthlyRate: vehicle.monthly_rate || null,
             notes: vehicle.notes || null,
+            isFleetVehicle: true, // Marked as true because synced from /fleets/vehicles endpoint
             raw: vehicle,
             sourceHash,
             firstSeenAt: now,
@@ -1685,6 +1686,7 @@ export async function syncFleetVehicles(ctx: HQSyncContext): Promise<HQSyncResul
               weeklyRate: vehicle.weekly_rate || null,
               monthlyRate: vehicle.monthly_rate || null,
               notes: vehicle.notes || null,
+              isFleetVehicle: true, // Always true for fleet vehicles
               raw: vehicle,
               sourceHash,
               lastSeenAt: now,
