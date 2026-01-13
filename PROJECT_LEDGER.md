@@ -27,7 +27,28 @@
    - 247 devices synced to database
    - Geofence API returned 404 (no geofences configured)
 
-## Last Session (2026-01-13)
+## Last Session (2026-01-13 - Current)
+- **Date:** 2026-01-13
+- **Branch:** claude/find-uncommitted-changes-6sZ5T
+- **Duration:** Fleet vehicle filter fix + GitHub Actions deployment setup
+- **Completed:**
+  - **Fleet Vehicle Filter Fix**:
+    - Added `is_fleet_vehicle` boolean field to hq_vehicles table
+    - Updated `syncFleetVehicles` to mark vehicles from `/fleets/vehicles` endpoint
+    - Updated vehicles API (listWithLocation, stats) to filter by is_fleet_vehicle=true
+    - Vehicles page now shows 87-88 actual fleet vehicles (not all 243 HQ vehicles)
+    - Migration: 0002_add_fleet_vehicle_flag.sql
+  - **GitHub Actions Deployment**:
+    - Created auto-deployment workflow (.github/workflows/deploy.yml)
+    - Auto-deploys on push to main, frontend-work, and claude/* branches
+    - Setup documentation in .github/DEPLOYMENT_SETUP.md
+    - **Pending:** SSH_PRIVATE_KEY secret needs to be configured for deployment to work
+- **Notes:**
+  - Vehicles page was showing all 243 HQ vehicles (including reservation-only)
+  - Should only show 87-88 fleet vehicles from /fleets/vehicles API endpoint
+  - Fix ensures vehicles page displays actual active fleet only
+
+## Previous Session (2026-01-13)
 - **Date:** 2026-01-13
 - **Branch:** claude/code-review-feedback-YAe51
 - **Duration:** Customers page implementation
