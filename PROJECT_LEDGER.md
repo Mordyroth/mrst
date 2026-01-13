@@ -27,7 +27,35 @@
    - 247 devices synced to database
    - Geofence API returned 404 (no geofences configured)
 
-## Last Session (Overnight 2026-01-12/13)
+## Last Session (2026-01-13)
+- **Date:** 2026-01-13
+- **Branch:** claude/code-review-feedback-YAe51
+- **Duration:** Customers page implementation
+- **Completed:**
+  - **Customers Page** (`/customers`):
+    - Created customersRouter in tRPC with list, get, stats, search endpoints
+    - Customer list page with search (name, email, phone, license), filters, sorting
+    - Stats cards: Total customers (2,383), active rentals, new customers
+    - Customer cards showing contact info, active rental badges, event counts
+  - **Customer Detail Page** (`/customers/[id]`):
+    - Contact info card with email, phone, address, date of birth
+    - Stats cards: Lifetime rentals, total revenue, emails, total events
+    - Tabbed interface: Overview, Rentals, Communications, Monday.com, Timeline
+    - Active rentals and upcoming reservations display
+    - Recent emails preview (last 5)
+    - Monday.com linked items
+    - Timeline tab (placeholder for integration)
+  - **Architecture**:
+    - Uses core_customers as primary table
+    - Joins with hq_customers via external_links
+    - Aggregates data from hq_reservations, gmail_messages, monday_items
+    - Leverages existing timeline_events and timeline_event_links
+- **Notes:**
+  - API needs restart on production to load new router
+  - Timeline tab ready for integration with existing Timeline component
+  - Follows vehicles page pattern for consistency
+
+## Previous Session (Overnight 2026-01-12/13)
 - **Date:** 2026-01-12/13
 - **Branch:** frontend-work
 - **Duration:** Autonomous overnight session
