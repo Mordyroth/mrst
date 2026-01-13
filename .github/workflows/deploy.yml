@@ -37,6 +37,8 @@ jobs:
             pnpm install --frozen-lockfile
 
             echo "🏗️ Building..."
+            # Clear Next.js cache to ensure fresh build
+            rm -rf apps/web/.next
             pnpm build
 
             echo "🗄️ Running database migrations..."
@@ -67,8 +69,9 @@ jobs:
             DATABASE_URL="$DATABASE_URL" npx tsx packages/integrations/src/hq/run-extended-sync.ts || echo "⚠️ Sync failed, continuing with deployment"
 
             echo "🔄 Restarting services..."
-            pm2 restart mrst-api
-            pm2 restart mrst-web
+            pm2 delete mrst-api || true
+            pm2 delete mrst-web || true
+            pm2 start ecosystem.config.js
 
             echo "📊 Service status:"
             pm2 list | grep mrst
