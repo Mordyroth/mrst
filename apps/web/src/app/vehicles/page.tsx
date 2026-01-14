@@ -155,7 +155,7 @@ function VehicleCard({ vehicle }: { vehicle: Vehicle }) {
   const isAnomaly = hasAnomaly(vehicle)
   const [imageError, setImageError] = useState(false)
   // Use unitNumber for image filename (e.g., V385.png, G304.png)
-  const imageUrl = vehicle.unitNumber ? `/images/vehicles/${vehicle.unitNumber}.png` : null
+  const imageUrl = vehicle.unitNumber ? `/mrst/images/vehicles/${vehicle.unitNumber}.png` : null
 
   return (
     <Link href={`/mrst/vehicles/${vehicle.id}`} className="block">

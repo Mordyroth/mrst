@@ -235,7 +235,7 @@ export default function VehicleDetailPage() {
             {unitNumber && !imageError && (
               <div className="mb-6 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 p-4 sm:p-6">
                 <img
-                  src={`/images/vehicles/${unitNumber}.png`}
+                  src={`/mrst/images/vehicles/${unitNumber}.png`}
                   alt={`${vehicle.year} ${vehicle.make} ${vehicle.model}`}
                   className="w-full max-w-md mx-auto h-auto object-contain"
                   style={{ maxHeight: '240px' }}
