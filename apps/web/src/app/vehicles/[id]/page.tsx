@@ -24,6 +24,9 @@ import {
   DollarSign,
   FileText,
   Hash,
+  History,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 
 // Get API URL
@@ -67,6 +70,27 @@ interface VehicleDetail {
     ignitionOn: boolean | null
     isOnline: boolean | null
   } | null
+}
+
+interface LocationRecord {
+  id: string
+  lat: number
+  lng: number
+  speed: number | null
+  heading: number | null
+  address: string | null
+  city: string | null
+  eventType: string | null
+  recordedAt: string
+}
+
+interface LocationHistory {
+  locations: LocationRecord[]
+  deviceId: string | null
+  lastAtShopAt: string | null
+  vehicleVin: string | null
+  unitNumber: string | null
+  message?: string
 }
 
 // Shop location for "At Shop" calculation
@@ -134,6 +158,9 @@ export default function VehicleDetailPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [imageError, setImageError] = useState(false)
+  const [locationHistory, setLocationHistory] = useState<LocationHistory | null>(null)
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
 
   const user = { email: 'admin@travelautorental.com', name: 'Admin' }
 
@@ -171,6 +198,35 @@ export default function VehicleDetailPage() {
       fetchVehicle()
     }
   }, [vehicleId])
+
+  // Fetch location history when expanded
+  useEffect(() => {
+    async function fetchLocationHistory() {
+      if (!showHistory || !vehicleId || locationHistory) return
+
+      setHistoryLoading(true)
+      try {
+        const token = 'demo_token_permanent_access_2026'
+        const res = await fetch(
+          `${API_URL}/trpc/vehicles.locationHistory?input=${encodeURIComponent(JSON.stringify({
+            json: { vehicleId, limit: 50 }
+          }))}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+
+        if (res.ok) {
+          const data = await res.json()
+          setLocationHistory(data.result?.data?.json || null)
+        }
+      } catch (err) {
+        console.error('Failed to fetch location history:', err)
+      } finally {
+        setHistoryLoading(false)
+      }
+    }
+
+    fetchLocationHistory()
+  }, [showHistory, vehicleId, locationHistory])
 
   const openInMaps = () => {
     if (vehicle?.gps?.lat && vehicle?.gps?.lng) {
@@ -444,6 +500,113 @@ export default function VehicleDetailPage() {
                     </div>
                   )}
                 </CardContent>
+              </Card>
+
+              {/* GPS Location History */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <History className="h-5 w-5" />
+                      Location History
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowHistory(!showHistory)}
+                    >
+                      {showHistory ? (
+                        <>
+                          <ChevronUp className="h-4 w-4 mr-1" />
+                          Hide
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="h-4 w-4 mr-1" />
+                          Show
+                        </>
+                      )}
+                    </Button>
+                  </CardTitle>
+                  {locationHistory?.lastAtShopAt && (
+                    <div className="text-xs text-muted-foreground">
+                      Last at shop: {formatTimeAgo(locationHistory.lastAtShopAt)}
+                    </div>
+                  )}
+                </CardHeader>
+
+                {showHistory && (
+                  <CardContent>
+                    {historyLoading ? (
+                      <div className="space-y-2">
+                        {[...Array(5)].map((_, i) => (
+                          <Skeleton key={i} className="h-12 w-full" />
+                        ))}
+                      </div>
+                    ) : locationHistory?.locations && locationHistory.locations.length > 0 ? (
+                      <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                        {locationHistory.locations.map((loc, index) => {
+                          const locAtShop = isAtShop(loc.lat, loc.lng)
+                          const prevLoc = locationHistory.locations[index + 1]
+                          const showShopTransition = prevLoc && isAtShop(prevLoc.lat, prevLoc.lng) !== locAtShop
+
+                          return (
+                            <div key={loc.id}>
+                              {showShopTransition && (
+                                <div className={`text-xs font-medium px-2 py-1 rounded mb-1 ${
+                                  locAtShop
+                                    ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400'
+                                    : 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400'
+                                }`}>
+                                  {locAtShop ? '→ Arrived at Shop' : '← Left Shop'}
+                                </div>
+                              )}
+                              <div
+                                className={`flex items-start gap-3 p-2 rounded-lg text-sm ${
+                                  locAtShop
+                                    ? 'bg-green-50 dark:bg-green-950/30'
+                                    : 'bg-muted/50'
+                                }`}
+                              >
+                                <div className="flex-shrink-0 mt-0.5">
+                                  <MapPin className={`h-4 w-4 ${locAtShop ? 'text-green-600' : 'text-muted-foreground'}`} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className={locAtShop ? 'text-green-700 dark:text-green-400 font-medium' : ''}>
+                                      {locAtShop ? 'At Shop' : (loc.city || loc.address || `${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}`)}
+                                    </span>
+                                    {loc.speed !== null && loc.speed > 0 && (
+                                      <span className="text-xs text-muted-foreground">
+                                        {Math.round(loc.speed)} mph
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <Clock className="h-3 w-3" />
+                                    {new Date(loc.recordedAt).toLocaleString()}
+                                    {loc.eventType && loc.eventType !== 'periodic' && (
+                                      <Badge variant="outline" className="ml-1 text-[10px] py-0">
+                                        {loc.eventType.replace(/_/g, ' ')}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-center py-6 text-muted-foreground">
+                        <History className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">
+                          {locationHistory?.message || 'No location history available'}
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                )}
               </Card>
             </div>
 

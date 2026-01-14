@@ -24,6 +24,7 @@ import {
   aiMessages,
   embeddings,
   spireonDevices,
+  spireonLocations,
   mondayItems,
   mondayItemColumnValues,
   mondayColumns,
@@ -1611,6 +1612,84 @@ const vehiclesRouter = t.router({
       return {
         ...v,
         gps: gpsData,
+      }
+    }),
+
+  // Get GPS location history for a vehicle
+  locationHistory: publicProcedure
+    .input(z.object({
+      vehicleId: z.string(),
+      limit: z.number().min(1).max(500).default(100),
+      startDate: z.string().optional(), // ISO date string
+      endDate: z.string().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const { vehicleId, limit, startDate, endDate } = input
+
+      // First get the vehicle to get its VIN
+      let vehicle = await ctx.db
+        .select({ vin: hqVehicles.vin, unitNumber: hqVehicles.unitNumber })
+        .from(hqVehicles)
+        .where(and(
+          or(eq(hqVehicles.id, vehicleId), eq(hqVehicles.externalId, vehicleId)),
+          sql`${hqVehicles.deletedAt} IS NULL`
+        ))
+        .limit(1)
+
+      if (!vehicle[0]?.vin) {
+        return { locations: [], deviceId: null, message: 'Vehicle has no VIN or not found' }
+      }
+
+      // Find the spireon device by VIN
+      const [device] = await ctx.db
+        .select({ id: spireonDevices.id, lastAtShopAt: spireonDevices.lastAtShopAt })
+        .from(spireonDevices)
+        .where(sql`UPPER(${spireonDevices.vehicleVin}) = UPPER(${vehicle[0].vin})`)
+        .limit(1)
+
+      if (!device) {
+        return { locations: [], deviceId: null, message: 'No GPS device found for this vehicle' }
+      }
+
+      // Build conditions for location query
+      const conditions = [eq(spireonLocations.deviceId, device.id)]
+
+      if (startDate) {
+        conditions.push(sql`${spireonLocations.recordedAt} >= ${new Date(startDate)}`)
+      }
+      if (endDate) {
+        conditions.push(sql`${spireonLocations.recordedAt} <= ${new Date(endDate)}`)
+      }
+
+      // Query location history
+      const locations = await ctx.db
+        .select({
+          id: spireonLocations.id,
+          lat: spireonLocations.lat,
+          lng: spireonLocations.lng,
+          speed: spireonLocations.speed,
+          heading: spireonLocations.heading,
+          address: spireonLocations.address,
+          city: spireonLocations.city,
+          eventType: spireonLocations.eventType,
+          recordedAt: spireonLocations.recordedAt,
+        })
+        .from(spireonLocations)
+        .where(and(...conditions))
+        .orderBy(desc(spireonLocations.recordedAt))
+        .limit(limit)
+
+      return {
+        locations: locations.map(loc => ({
+          ...loc,
+          lat: Number(loc.lat),
+          lng: Number(loc.lng),
+          speed: loc.speed ? Number(loc.speed) : null,
+        })),
+        deviceId: device.id,
+        lastAtShopAt: device.lastAtShopAt,
+        vehicleVin: vehicle[0].vin,
+        unitNumber: vehicle[0].unitNumber,
       }
     }),
 })
