@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2024 Genesis GV80 Blue - Model Comparison</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0a0a;
+            color: #fff;
+            padding: 40px;
+        }
+        h1 { text-align: center; margin-bottom: 10px; }
+        .subtitle { text-align: center; color: #888; margin-bottom: 40px; }
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        @media (max-width: 1200px) {
+            .comparison-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 800px) {
+            .comparison-grid { grid-template-columns: 1fr; }
+        }
+        .model-card {
+            background: #151515;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid #2a2a2a;
+        }
+        .model-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid #2a2a2a;
+        }
+        .model-name { font-weight: 600; font-size: 18px; margin-bottom: 4px; }
+        .model-id { font-size: 12px; color: #666; font-family: monospace; }
+        .image-container {
+            aspect-ratio: 16/9;
+            background: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .image-container img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        .model-footer {
+            padding: 12px 20px;
+            font-size: 12px;
+            color: #666;
+            border-top: 1px solid #2a2a2a;
+            display: flex;
+            justify-content: space-between;
+        }
+        .file-size { color: #5cb85c; }
+        .prompt-section {
+            max-width: 1600px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #151515;
+            border-radius: 12px;
+            border: 1px solid #2a2a2a;
+        }
+        .prompt-section h3 { margin-bottom: 12px; color: #5cb85c; }
+        .prompt-text {
+            font-size: 14px;
+            color: #aaa;
+            line-height: 1.6;
+            font-style: italic;
+        }
+        .summary {
+            text-align: center;
+            margin-top: 30px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <h1>2024 Genesis GV80 Blue</h1>
+    <p class="subtitle">AI Image Model Comparison - Same Prompt, 3 Different Models</p>
+
+    <div class="comparison-grid">
+        <div class="model-card">
+            <div class="model-header">
+                <div class="model-name">Gemini 2.5 Flash Image</div>
+                <div class="model-id">gemini-2.5-flash-image</div>
+            </div>
+            <div class="image-container">
+                <img src="images/vehicles/test_gv80_gemini25_flash.png" alt="Gemini 2.5 Flash">
+            </div>
+            <div class="model-footer">
+                <span>test_gv80_gemini25_flash.png</span>
+                <span class="file-size">1.1 MB</span>
+            </div>
+        </div>
+
+        <div class="model-card">
+            <div class="model-header">
+                <div class="model-name">Gemini 2.0 Flash Exp</div>
+                <div class="model-id">gemini-2.0-flash-exp</div>
+            </div>
+            <div class="image-container">
+                <img src="images/vehicles/test_gv80_gemini20_exp.png" alt="Gemini 2.0 Flash Exp">
+            </div>
+            <div class="model-footer">
+                <span>test_gv80_gemini20_exp.png</span>
+                <span class="file-size">619 KB</span>
+            </div>
+        </div>
+
+        <div class="model-card">
+            <div class="model-header">
+                <div class="model-name">Imagen 4.0</div>
+                <div class="model-id">imagen-4.0-generate-001</div>
+            </div>
+            <div class="image-container">
+                <img src="images/vehicles/test_gv80_imagen4.png" alt="Imagen 4.0">
+            </div>
+            <div class="model-footer">
+                <span>test_gv80_imagen4.png</span>
+                <span class="file-size">1.1 MB</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="prompt-section">
+        <h3>Prompt Used (All Models)</h3>
+        <p class="prompt-text">"Professional automotive photography of a 2024 Genesis GV80 in Blue. Three-quarter front view, 45 degrees from front-left corner, slightly elevated perspective showing hood and roofline elegantly. Vehicle perfectly straight, all four wheels clearly visible, slight wheel turn toward camera for dynamic feel. Professional studio lighting, soft diffused light from above-left, subtle rim lighting on edges, gentle shadow beneath vehicle for grounding. Pure clean white background, completely isolated vehicle, no environment, no reflections. Ultra photorealistic, sharp focus, high-end dealership catalog quality. No text, no watermarks, no logos."</p>
+    </div>
+
+    <p class="summary">
+        Generated: Jan 12, 2026 | Note: Imagen 3.0 model not available (404)
+    </p>
+</body>
+</html>

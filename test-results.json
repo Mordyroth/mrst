@@ -1,0 +1,139 @@
+{
+  "passed": [
+    {
+      "name": "Dashboard - Desktop Layout",
+      "duration": 2306,
+      "details": {
+        "sidebarWidth": 256,
+        "title": "Dashboard"
+      }
+    },
+    {
+      "name": "Vehicles Page - Load",
+      "duration": 5208,
+      "details": {
+        "title": "Vehicles",
+        "vehicleCount": 243,
+        "total": 243
+      }
+    },
+    {
+      "name": "Vehicles Page - Vehicle Info Display",
+      "duration": 5157,
+      "details": {
+        "hasVehicleInfo": true,
+        "hasColor": true,
+        "pageHasInfo": true,
+        "sampleMakes": [
+          "Acura",
+          "Acura",
+          "Acura"
+        ]
+      }
+    },
+    {
+      "name": "Vehicles Page - Location Status",
+      "duration": 5173,
+      "details": {
+        "hasAtShop": true,
+        "hasAwayFromShop": true,
+        "hasRenter": true
+      }
+    },
+    {
+      "name": "Vehicles Page - Last at Shop Status",
+      "duration": 5153,
+      "details": {
+        "vehiclesWithLastAtShop": 14,
+        "pageShowsLastAtShop": false
+      }
+    },
+    {
+      "name": "Vehicle Detail Page",
+      "duration": 8322,
+      "details": {
+        "url": "https://app.travelautorental.com/mrst/vehicles/fee025b5-63a8-4fc3-a3f5-75c717879dc3",
+        "hasBackButton": true,
+        "hasError": false
+      }
+    },
+    {
+      "name": "Customers Page",
+      "duration": 3166,
+      "details": {
+        "title": "Customers",
+        "hasSearch": true,
+        "hasData": false
+      }
+    },
+    {
+      "name": "Timeline Page",
+      "duration": 3178,
+      "details": {
+        "title": "Activity Timeline",
+        "hasEvents": true
+      }
+    },
+    {
+      "name": "Fleet Map Page",
+      "duration": 3167,
+      "details": {
+        "title": "Fleet Map",
+        "hasMapElement": true
+      }
+    },
+    {
+      "name": "Mobile Layout",
+      "duration": 2165,
+      "details": {
+        "sidebarHidden": true,
+        "hasHeader": true,
+        "hasBottomNav": true
+      }
+    },
+    {
+      "name": "Navigation Works",
+      "duration": 4161,
+      "details": {
+        "currentUrl": "https://app.travelautorental.com/mrst/vehicles"
+      }
+    }
+  ],
+  "failed": [
+    {
+      "name": "Dashboard - Stats Cards",
+      "duration": 3261,
+      "error": "Available stats missing",
+      "details": {
+        "hasTotal": true,
+        "hasAvailable": false,
+        "hasRented": true
+      }
+    },
+    {
+      "name": "Vehicles Page - City Display",
+      "duration": 5195,
+      "details": {
+        "vehiclesWithCity": 0,
+        "sampleCities": []
+      }
+    }
+  ],
+  "timing": {
+    "Dashboard - Desktop Layout": 2306,
+    "Dashboard - Stats Cards": 3261,
+    "Vehicles Page - Load": 5208,
+    "Vehicles Page - Vehicle Info Display": 5157,
+    "Vehicles Page - Location Status": 5173,
+    "Vehicles Page - City Display": 5195,
+    "Vehicles Page - Last at Shop Status": 5153,
+    "Vehicle Detail Page": 8322,
+    "Customers Page": 3166,
+    "Timeline Page": 3178,
+    "Fleet Map Page": 3167,
+    "Mobile Layout": 2165,
+    "Navigation Works": 4161
+  },
+  "totalTime": 55932,
+  "timestamp": "2026-01-12T22:04:38.661Z"
+}

@@ -222,7 +222,7 @@ function SidebarContent({ user, pathname, collapsed = false, onToggle }: {
                   size="sm"
                   className="w-full justify-center px-2 text-muted-foreground hover:text-foreground"
                   onClick={() => {
-                    window.location.href = '/login'
+                    window.location.href = '/mrst/login'
                   }}
                 >
                   <LogOut className="h-5 w-5" />
@@ -237,7 +237,7 @@ function SidebarContent({ user, pathname, collapsed = false, onToggle }: {
               variant="ghost"
               className="w-full justify-start gap-3 text-muted-foreground hover:text-foreground"
               onClick={() => {
-                window.location.href = '/login'
+                window.location.href = '/mrst/login'
               }}
             >
               <LogOut className="h-5 w-5" />
@@ -360,7 +360,7 @@ export function Sidebar({ user }: SidebarProps) {
                   <span>Settings</span>
                 </Link>
                 <button
-                  onClick={() => window.location.href = '/login'}
+                  onClick={() => window.location.href = '/mrst/login'}
                   className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-muted w-full text-left text-destructive"
                 >
                   <LogOut className="h-5 w-5" />

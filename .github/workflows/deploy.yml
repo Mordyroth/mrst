@@ -31,6 +31,9 @@ jobs:
             git checkout ${{ github.ref_name }}
             git pull origin ${{ github.ref_name }}
 
+            echo "⏸️ Stopping web server during build..."
+            pm2 stop mrst-web || true
+
             echo "📦 Installing dependencies..."
             export PNPM_HOME="/home/ec2-user/.local/share/pnpm"
             export PATH="$PNPM_HOME:$PATH"
