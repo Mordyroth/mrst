@@ -7,6 +7,7 @@
 import { eq, and, gte } from 'drizzle-orm'
 import * as crypto from 'crypto'
 import type { SpireonClient, SpireonDevice, SpireonGeofence } from './client'
+import { isAtShop } from '@mrst/shared'
 
 // Database types will be passed in
 interface DrizzleDB {
@@ -479,21 +480,33 @@ export async function pollCurrentLocations(config: SpireonSyncConfig): Promise<S
         }
       }
 
+      // Check if vehicle is at shop
+      const atShop = device.lastLocation.lat != null && device.lastLocation.lng != null
+        ? isAtShop(device.lastLocation.lat, device.lastLocation.lng)
+        : false
+
       // Update device's current location
+      const updateData: Record<string, unknown> = {
+        isOnline: device.isOnline,
+        lastCommunication,
+        currentLat: device.lastLocation.lat,
+        currentLng: device.lastLocation.lng,
+        currentSpeed: device.lastLocation.speed?.toString() || null,
+        currentHeading: device.lastLocation.heading || null,
+        currentAddress: device.lastLocation.address || null,
+        currentLocationAt: recordedAt,
+        ignitionOn: device.lastLocation.ignitionOn || false,
+        lastSeenAt: now,
+        syncedAt: now,
+      }
+
+      // Set lastAtShopAt if vehicle is currently at shop
+      if (atShop && recordedAt) {
+        updateData.lastAtShopAt = recordedAt
+      }
+
       await db.update(spireonDevices)
-        .set({
-          isOnline: device.isOnline,
-          lastCommunication,
-          currentLat: device.lastLocation.lat,
-          currentLng: device.lastLocation.lng,
-          currentSpeed: device.lastLocation.speed?.toString() || null,
-          currentHeading: device.lastLocation.heading || null,
-          currentAddress: device.lastLocation.address || null,
-          currentLocationAt: recordedAt,
-          ignitionOn: device.lastLocation.ignitionOn || false,
-          lastSeenAt: now,
-          syncedAt: now,
-        })
+        .set(updateData)
         .where(eq(spireonDevices.id, existing.id))
 
       stats.devicesUpdated++

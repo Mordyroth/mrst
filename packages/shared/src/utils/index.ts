@@ -7,6 +7,9 @@ import crypto from 'crypto'
 // Re-export S3 utilities
 export * from './s3'
 
+// Re-export shop location utilities
+export * from './shop-location'
+
 /**
  * Generate a SHA-256 hash of data for change detection
  */

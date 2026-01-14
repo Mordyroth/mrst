@@ -42,6 +42,8 @@ export const spireonDevices = pgTable('spireon_devices', {
   currentBatteryVoltage: decimal('current_battery_voltage', { precision: 5, scale: 2 }),
   currentFuelLevel: integer('current_fuel_level'),
   ignitionOn: boolean('ignition_on').default(false),
+  // Shop tracking - when vehicle was last at the shop location
+  lastAtShopAt: timestamp('last_at_shop_at', { withTimezone: true }),
   // Mirror fields
   raw: jsonb('raw').notNull(),
   firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),

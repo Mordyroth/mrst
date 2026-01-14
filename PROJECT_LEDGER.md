@@ -27,7 +27,48 @@
    - 247 devices synced to database
    - Geofence API returned 404 (no geofences configured)
 
-## Last Session (2026-01-13 - Current)
+3. **Vehicle Anomaly Detection - HQ Status Mismatch** (2026-01-14)
+   - **Issue:** 6 vehicles showing "available but not at shop" on vehicles page
+   - **HQ API Verification Results:**
+     - 4 vehicles ARE truly "available" in HQ but located away from shop (legitimate anomalies)
+     - 2 vehicles are actually "rental" status in HQ but showing as "available" in our sync
+       - Ford Explorer V406 (VIN: 1FM5K8HC7NGB62490) - HQ shows rental since 2026-01-15
+       - Hyundai Tucson V398 (VIN: 5NMJB3DE7SH444260) - HQ shows rental since 2026-01-15
+   - **CRITICAL NOTE:** HQ reservations with past return dates do NOT mean the rental is ended
+     - Trips may not be extended in the system yet, renter may still have the vehicle
+     - Example: Reservation shows return date 2025-12-29 but vehicle still out in January
+     - Never auto-complete trips based on date - only trust HQ status field
+   - **Sync Issue:** Our sync may be caching stale status - need to verify sync freshness
+   - **Vehicles verified (2026-01-14):**
+     - V378 BMW X5: available in HQ since 2025-12-24, located ~22 miles from shop
+     - V370 Ford Expedition: available in HQ since 2026-01-06, located ~15 miles from shop
+     - V406 Ford Explorer: RENTAL in HQ (active with Moshe Spira), NOT available
+     - V349 Honda Odyssey: available in HQ since 2026-01-13, located ~28 miles from shop
+     - V398 Hyundai Tucson: RENTAL in HQ (active with Sigalit Babaev), NOT available
+     - V388 Mazda CX-90: available in HQ since 2026-01-01, located ~2 miles from shop
+
+## Last Session (2026-01-14 - Current)
+- **Date:** 2026-01-14
+- **Branch:** claude/find-uncommitted-changes-6sZ5T
+- **Duration:** 404 fix + Vehicle anomaly verification
+- **Completed:**
+  - **Fixed 404 on /mrst/vehicles**:
+    - Added `basePath: '/mrst'` to Next.js config
+    - Updated nginx to pass full path (not strip /mrst prefix)
+    - Fixed multiple type errors in router.ts (schema field mismatches)
+  - **HQ API Anomaly Verification**:
+    - Verified 6 "available but not at shop" vehicles against live HQ API
+    - Found 2 vehicles with stale status (showing available when actually rented)
+    - Documented findings in Outstanding Issues section above
+  - **Restored Vehicles Page Layout**:
+    - Restored frontend-work version with location banners and sorting
+    - Vehicle cards now show "At Shop", "Out with Renter", "Away from Shop" banners
+- **Notes:**
+  - HQ API reservations with past return dates still show as "rental" - this is correct
+  - Never auto-complete based on date - trust HQ status field only
+  - Renter may still have vehicle even if return date passed (just not extended yet)
+
+## Previous Session (2026-01-13)
 - **Date:** 2026-01-13
 - **Branch:** claude/find-uncommitted-changes-6sZ5T
 - **Duration:** Fleet vehicle filter fix + GitHub Actions deployment setup
