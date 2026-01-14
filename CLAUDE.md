@@ -23,6 +23,38 @@ Philosophy: Mirror all data → AI intelligence layer → Adaptive UI.
 - Tests alongside implementation
 - Drizzle schema in `packages/db/src/schema/`
 
+## CRITICAL: Next.js basePath Routing Rules
+The app uses `basePath: '/mrst'` in next.config.ts. This affects ALL routing:
+
+### DO NOT include `/mrst` prefix in:
+- `<Link href="...">` - Next.js adds basePath automatically
+- `useRouter().push("...")` - basePath added automatically
+- Any Next.js navigation functions
+
+### MUST include `/mrst` prefix in:
+- `<a href="...">` - Regular HTML anchors (no automatic prefix)
+- `window.location.href = "..."` - Direct browser navigation
+- `<img src="/mrst/images/...">` - Static assets
+- Fetch URLs to external services (keep as is)
+
+### Examples:
+```tsx
+// CORRECT:
+<Link href="/dashboard">           // renders as /mrst/dashboard
+<Link href="/vehicles/123">        // renders as /mrst/vehicles/123
+<img src="/mrst/images/car.png">   // static asset, needs prefix
+<a href="/mrst/timeline">          // regular anchor, needs prefix
+window.location.href = '/mrst/login'  // direct nav, needs prefix
+
+// WRONG - causes 404:
+<Link href="/mrst/dashboard">      // renders as /mrst/mrst/dashboard
+<Link href="/mrst/vehicles/123">   // double prefix = broken!
+```
+
+### Before committing frontend changes:
+Run: `grep -r 'href="/mrst' apps/web/src --include="*.tsx" | grep '<Link'`
+If any results, those Links need the `/mrst` prefix REMOVED.
+
 ## Integration Rules (CRITICAL)
 - NEVER code integrations without reading full API docs
 - ALWAYS store complete `raw` JSONB response

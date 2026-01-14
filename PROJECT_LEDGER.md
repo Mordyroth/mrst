@@ -15,6 +15,21 @@
 - **Login:** admin@travelautorental.com / admin123
 - **Config:** ecosystem.config.js, nginx-mrst.conf
 
+## CRITICAL: basePath Routing (MUST READ)
+Next.js uses `basePath: '/mrst'` which automatically prefixes routes.
+
+**Rules:**
+- `<Link href="/dashboard">` → CORRECT (Next.js renders as /mrst/dashboard)
+- `<Link href="/mrst/dashboard">` → WRONG (renders as /mrst/mrst/dashboard = 404!)
+- `<a href="/mrst/timeline">` → CORRECT (regular anchor needs prefix)
+- `<img src="/mrst/images/...">` → CORRECT (static assets need prefix)
+- `window.location.href = '/mrst/login'` → CORRECT (direct nav needs prefix)
+
+**Before committing frontend:**
+Run `./scripts/check-link-paths.sh` to verify no incorrect Link hrefs exist.
+
+**This has caused multiple 404 issues. See CLAUDE.md for full documentation.**
+
 ## Outstanding Issues
 1. **certifiedautocollision.com Gmail**: Needs SEPARATE service account
    - The old code used TWO service account files - one per domain
@@ -50,12 +65,17 @@
 ## Last Session (2026-01-14 - Current)
 - **Date:** 2026-01-14
 - **Branch:** claude/find-uncommitted-changes-6sZ5T
-- **Duration:** 404 fix + Vehicle anomaly verification
+- **Duration:** basePath routing fixes + Documentation
 - **Completed:**
-  - **Fixed 404 on /mrst/vehicles**:
-    - Added `basePath: '/mrst'` to Next.js config
-    - Updated nginx to pass full path (not strip /mrst prefix)
-    - Fixed multiple type errors in router.ts (schema field mismatches)
+  - **Fixed RECURRING 404 Issues (CRITICAL)**:
+    - Root cause: With `basePath: '/mrst'`, Next.js `<Link>` components auto-prepend /mrst
+    - So `<Link href="/mrst/dashboard">` rendered as `/mrst/mrst/dashboard` = 404!
+    - Fixed ALL Link components to remove /mrst prefix (Next.js adds it)
+    - Note: `<a>` tags, `window.location.href`, and static `src` paths NEED /mrst prefix
+  - **Added Prevention Mechanisms**:
+    - Created `scripts/check-link-paths.sh` - lint script to catch wrong Link hrefs
+    - Added CRITICAL section to CLAUDE.md with routing rules
+    - Added CRITICAL section to PROJECT_LEDGER.md with routing rules
   - **HQ API Anomaly Verification**:
     - Verified 6 "available but not at shop" vehicles against live HQ API
     - Found 2 vehicles with stale status (showing available when actually rented)
@@ -66,7 +86,7 @@
 - **Notes:**
   - HQ API reservations with past return dates still show as "rental" - this is correct
   - Never auto-complete based on date - trust HQ status field only
-  - Renter may still have vehicle even if return date passed (just not extended yet)
+  - ALWAYS run `./scripts/check-link-paths.sh` before committing frontend changes
 
 ## Previous Session (2026-01-13)
 - **Date:** 2026-01-13

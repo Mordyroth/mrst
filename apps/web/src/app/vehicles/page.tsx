@@ -158,7 +158,7 @@ function VehicleCard({ vehicle }: { vehicle: Vehicle }) {
   const imageUrl = vehicle.unitNumber ? `/mrst/images/vehicles/${vehicle.unitNumber}.png` : null
 
   return (
-    <Link href={`/mrst/vehicles/${vehicle.id}`} className="block">
+    <Link href={`/vehicles/${vehicle.id}`} className="block">
       <div className={`group flex border rounded-lg overflow-hidden hover:border-primary hover:shadow-md transition-all cursor-pointer ${
         isAnomaly
           ? 'border-orange-400 bg-orange-50/50 dark:bg-orange-950/20'

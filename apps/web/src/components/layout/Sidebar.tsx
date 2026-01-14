@@ -24,19 +24,19 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useState, useEffect } from 'react'
 
 const navItems = [
-  { href: '/mrst/dashboard', path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/mrst/vehicles', path: '/vehicles', label: 'Vehicles', icon: Car },
-  { href: '/mrst/timeline', path: '/timeline', label: 'Timeline', icon: Clock },
-  { href: '/mrst/map', path: '/map', label: 'Fleet Map', icon: Map },
-  { href: '/mrst/suggestions', path: '/suggestions', label: 'Suggestions', icon: Lightbulb },
-  { href: '/mrst/customers', path: '/customers', label: 'Customers', icon: Users },
+  { href: '/dashboard', path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/vehicles', path: '/vehicles', label: 'Vehicles', icon: Car },
+  { href: '/timeline', path: '/timeline', label: 'Timeline', icon: Clock },
+  { href: '/map', path: '/map', label: 'Fleet Map', icon: Map },
+  { href: '/suggestions', path: '/suggestions', label: 'Suggestions', icon: Lightbulb },
+  { href: '/customers', path: '/customers', label: 'Customers', icon: Users },
 ]
 
 const bottomNavItems = [
-  { href: '/mrst/dashboard', path: '/dashboard', label: 'Home', icon: LayoutDashboard },
-  { href: '/mrst/vehicles', path: '/vehicles', label: 'Vehicles', icon: Car },
-  { href: '/mrst/timeline', path: '/timeline', label: 'Timeline', icon: Clock },
-  { href: '/mrst/map', path: '/map', label: 'Map', icon: Map },
+  { href: '/dashboard', path: '/dashboard', label: 'Home', icon: LayoutDashboard },
+  { href: '/vehicles', path: '/vehicles', label: 'Vehicles', icon: Car },
+  { href: '/timeline', path: '/timeline', label: 'Timeline', icon: Clock },
+  { href: '/map', path: '/map', label: 'Map', icon: Map },
 ]
 
 // Check if pathname matches a nav item (accounts for nginx stripping /mrst prefix)
@@ -103,7 +103,7 @@ function SidebarContent({ user, pathname, collapsed = false, onToggle }: {
       <div className="flex flex-col h-full">
         {/* Logo */}
         <div className={cn("p-4 border-b", collapsed && "px-2")}>
-          <Link href="/mrst/dashboard" className={cn("flex items-center gap-2", collapsed && "justify-center")}>
+          <Link href="/dashboard" className={cn("flex items-center gap-2", collapsed && "justify-center")}>
             <Car className="h-8 w-8 text-primary flex-shrink-0" />
             {!collapsed && <span className="text-xl font-bold">MRST</span>}
           </Link>
@@ -151,7 +151,7 @@ function SidebarContent({ user, pathname, collapsed = false, onToggle }: {
             <Tooltip delayDuration={0}>
               <TooltipTrigger asChild>
                 <Link
-                  href="/mrst/settings"
+                  href="/settings"
                   className={cn(
                     'flex items-center justify-center px-2 py-2 rounded-lg text-sm font-medium transition-colors',
                     isActivePath(pathname, '/settings')
@@ -168,7 +168,7 @@ function SidebarContent({ user, pathname, collapsed = false, onToggle }: {
             </Tooltip>
           ) : (
             <Link
-              href="/mrst/settings"
+              href="/settings"
               className={cn(
                 'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
                 isActivePath(pathname, '/settings')
@@ -299,7 +299,7 @@ export function Sidebar({ user }: SidebarProps) {
           </SheetContent>
         </Sheet>
 
-        <Link href="/mrst/dashboard" className="flex items-center gap-2">
+        <Link href="/dashboard" className="flex items-center gap-2">
           <Car className="h-6 w-6 text-primary" />
           <span className="text-lg font-bold">MRST</span>
         </Link>
@@ -338,14 +338,14 @@ export function Sidebar({ user }: SidebarProps) {
             <SheetContent side="bottom" className="h-auto">
               <div className="py-4 space-y-2">
                 <Link
-                  href="/mrst/suggestions"
+                  href="/suggestions"
                   className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-muted"
                 >
                   <Lightbulb className="h-5 w-5" />
                   <span>Suggestions</span>
                 </Link>
                 <Link
-                  href="/mrst/customers"
+                  href="/customers"
                   className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-muted"
                 >
                   <Users className="h-5 w-5" />
@@ -353,7 +353,7 @@ export function Sidebar({ user }: SidebarProps) {
                 </Link>
                 <Separator />
                 <Link
-                  href="/mrst/settings"
+                  href="/settings"
                   className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-muted"
                 >
                   <Settings className="h-5 w-5" />

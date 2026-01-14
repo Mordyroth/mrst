@@ -194,7 +194,7 @@ export default function VehicleDetailPage() {
       <div className="p-4 sm:p-6 lg:p-8">
         {/* Back button */}
         <div className="mb-6">
-          <Link href="/mrst/vehicles">
+          <Link href="/vehicles">
             <Button variant="ghost" size="sm">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Vehicles
@@ -224,7 +224,7 @@ export default function VehicleDetailPage() {
               <p className="text-muted-foreground mb-4">
                 The vehicle you&apos;re looking for could not be found.
               </p>
-              <Link href="/mrst/vehicles">
+              <Link href="/vehicles">
                 <Button>Back to Vehicles</Button>
               </Link>
             </CardContent>

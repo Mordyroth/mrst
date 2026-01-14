@@ -253,7 +253,7 @@ export default function DashboardPage() {
           <>
             <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
               {/* Stats cards with sparklines */}
-              <Link href="/mrst/vehicles">
+              <Link href="/vehicles">
                 <Card className="hover:border-primary transition-colors cursor-pointer overflow-hidden">
                   <CardContent className="p-6 pb-2">
                     <div className="flex items-center justify-between">
@@ -292,7 +292,7 @@ export default function DashboardPage() {
                   />
                 </div>
               </Card>
-              <Link href="/mrst/customers">
+              <Link href="/customers">
                 <Card className="hover:border-primary transition-colors cursor-pointer overflow-hidden">
                   <CardContent className="p-6 pb-2">
                     <div className="flex items-center justify-between">
@@ -313,7 +313,7 @@ export default function DashboardPage() {
                   </div>
                 </Card>
               </Link>
-              <Link href="/mrst/suggestions">
+              <Link href="/suggestions">
                 <Card className="hover:border-primary transition-colors cursor-pointer overflow-hidden">
                   <CardContent className="p-6 pb-2">
                     <div className="flex items-center justify-between">
@@ -348,7 +348,7 @@ export default function DashboardPage() {
               <div className="rounded-lg border bg-card p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold">Vehicle Status</h2>
-                  <Link href="/mrst/vehicles" className="text-sm text-primary hover:underline">
+                  <Link href="/vehicles" className="text-sm text-primary hover:underline">
                     View all
                   </Link>
                 </div>
