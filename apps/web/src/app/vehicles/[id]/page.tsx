@@ -76,10 +76,14 @@ interface LocationRecord {
   id: string
   lat: number
   lng: number
+  altitude: number | null
+  accuracy: number | null
   speed: number | null
   heading: number | null
   address: string | null
   city: string | null
+  state: string | null
+  zipCode: string | null
   eventType: string | null
   recordedAt: string
 }
@@ -562,35 +566,66 @@ export default function VehicleDetailPage() {
                                 </div>
                               )}
                               <div
-                                className={`flex items-start gap-3 p-2 rounded-lg text-sm ${
+                                className={`p-3 rounded-lg text-sm border ${
                                   locAtShop
-                                    ? 'bg-green-50 dark:bg-green-950/30'
-                                    : 'bg-muted/50'
+                                    ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800'
+                                    : 'bg-muted/50 border-border'
                                 }`}
                               >
-                                <div className="flex-shrink-0 mt-0.5">
-                                  <MapPin className={`h-4 w-4 ${locAtShop ? 'text-green-600' : 'text-muted-foreground'}`} />
-                                </div>
-                                <div className="flex-1 min-w-0">
+                                {/* Header row with status and time */}
+                                <div className="flex items-center justify-between mb-2">
                                   <div className="flex items-center gap-2">
-                                    <span className={locAtShop ? 'text-green-700 dark:text-green-400 font-medium' : ''}>
-                                      {locAtShop ? 'At Shop' : (loc.city || loc.address || `${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}`)}
+                                    <MapPin className={`h-4 w-4 ${locAtShop ? 'text-green-600' : 'text-muted-foreground'}`} />
+                                    <span className={`font-medium ${locAtShop ? 'text-green-700 dark:text-green-400' : ''}`}>
+                                      {locAtShop ? 'At Shop' : 'Away'}
                                     </span>
-                                    {loc.speed !== null && loc.speed > 0 && (
-                                      <span className="text-xs text-muted-foreground">
-                                        {Math.round(loc.speed)} mph
-                                      </span>
+                                    {loc.eventType && (
+                                      <Badge variant="outline" className="text-[10px] py-0">
+                                        {loc.eventType.replace(/_/g, ' ')}
+                                      </Badge>
                                     )}
                                   </div>
                                   <div className="text-xs text-muted-foreground flex items-center gap-1">
                                     <Clock className="h-3 w-3" />
                                     {new Date(loc.recordedAt).toLocaleString()}
-                                    {loc.eventType && loc.eventType !== 'periodic' && (
-                                      <Badge variant="outline" className="ml-1 text-[10px] py-0">
-                                        {loc.eventType.replace(/_/g, ' ')}
-                                      </Badge>
-                                    )}
                                   </div>
+                                </div>
+
+                                {/* Full address */}
+                                <div className="text-sm mb-2">
+                                  {loc.address && <div>{loc.address}</div>}
+                                  {(loc.city || loc.state || loc.zipCode) && (
+                                    <div className="text-muted-foreground">
+                                      {[loc.city, loc.state, loc.zipCode].filter(Boolean).join(', ')}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Motion data */}
+                                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                  {loc.speed !== null && (
+                                    <div>
+                                      <span className="font-medium">Speed:</span>{' '}
+                                      <span className={loc.speed > 0 ? 'text-blue-600' : ''}>
+                                        {Math.round(loc.speed)} mph
+                                      </span>
+                                    </div>
+                                  )}
+                                  {loc.heading !== null && (
+                                    <div>
+                                      <span className="font-medium">Heading:</span> {loc.heading}°
+                                    </div>
+                                  )}
+                                  {loc.altitude !== null && (
+                                    <div>
+                                      <span className="font-medium">Altitude:</span> {Math.round(loc.altitude)} ft
+                                    </div>
+                                  )}
+                                  {loc.accuracy !== null && (
+                                    <div>
+                                      <span className="font-medium">Accuracy:</span> ±{Math.round(loc.accuracy)}m
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </div>
